@@ -1,12 +1,5 @@
 {
   "rewrites": [
-    {
-      "source": "/view/:path*",
-      "destination": "/api/proxy?url=:path*"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/public/$1"
-    }
+    { "source": "/view/:path*", "destination": "/api/proxy?url=:path*" }
   ]
 }
