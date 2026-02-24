@@ -14,38 +14,25 @@ export default async function handler(req, res) {
             }
         });
 
-        if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
-
         const contentType = response.headers.get('content-type') || '';
         res.setHeader('Content-Type', contentType);
         res.setHeader('Cache-Control', 'public, max-age=86400');
 
-        // CSSファイルの場合だけ、中身のURLをさらに書き換える
+        // CSSの中身を書き換え
         if (contentType.includes('text/css')) {
             let cssText = await response.text();
-            
-            // CSS内の url(...) をすべてプロキシ経由に書き換え
             cssText = cssText.replace(/url\(["']?([^"')]+)["']?\)/g, (match, p1) => {
-                let fullPath = p1;
-                if (!p1.startsWith('http') && !p1.startsWith('data:')) {
-                    // 相対パスを絶対パスに変換
-                    fullPath = p1.startsWith('/') ? `${origin}${p1}` : `${targetUrl.substring(0, targetUrl.lastIndexOf('/') + 1)}${p1}`;
-                }
-                
-                if (fullPath.startsWith('http')) {
-                    return `url("/asset/${encodeUrl(fullPath)}")`;
-                }
-                return match;
+                if (p1.startsWith('data:')) return match;
+                let fullPath = p1.startsWith('http') ? p1 : (p1.startsWith('/') ? origin + p1 : new URL(p1, targetUrl).href);
+                return `url("/asset/${encodeUrl(fullPath)}")`;
             });
-            
             return res.send(cssText);
         }
 
-        // 画像やフォントなどは、そのままバイナリデータとして送信
+        // JSや画像などはそのまま転送（JSを消さないことで警告を回避）
         const buffer = await response.arrayBuffer();
         res.send(Buffer.from(buffer));
-
     } catch (e) {
-        res.status(500).send(`Asset Proxy Error: ${e.message}`);
+        res.status(500).send(`Asset Error: ${e.message}`);
     }
 }
