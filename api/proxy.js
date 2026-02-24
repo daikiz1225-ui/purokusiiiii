@@ -3,23 +3,26 @@ export default async function handler(req, res) {
     if (!url) return res.status(400).send('URL missing');
 
     try {
-        // Base64をデコードして元のURLを復元
+        // 1. URLの復元
         const decodedUrl = Buffer.from(url.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
-        
-        // ターゲットサイトへアクセス
+        const targetOrigin = new URL(decodedUrl).origin;
+
+        // 2. ターゲットサイトの取得
         const response = await fetch(decodedUrl, {
             headers: { 'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15' }
         });
+        let data = await response.text();
 
-        if (!response.ok) throw new Error(`Status: ${response.status}`);
+        // 3. パスの書き換え (CSSや画像が壊れるのを防ぐ)
+        // src="/..." や href="/..." を src="https://site.com/..." に置換
+        data = data.replace(/(src|href|action)="\/(?!\/)/g, `$1="${targetOrigin}/`);
+        
+        // 4. <head> の直後に <base> タグも念のため挿入
+        data = data.replace('<head>', `<head><base href="${targetOrigin}/">`);
 
-        const data = await response.text();
-
-        // サイトの中身を返す
         res.setHeader('Content-Type', 'text/html; charset=UTF-8');
         res.status(200).send(data);
     } catch (e) {
-        // エラー内容を表示（原因特定用）
-        res.status(500).send(`Error: ${e.message}`);
+        res.status(500).send(`Proxy Error: ${e.message}`);
     }
 }
