@@ -14,11 +14,22 @@ export default async function handler(req, res) {
             }
         });
 
+        // 【強化】もしエラー(404等)でも、空のJS/CSSを返してエラーを回避
+        if (!response.ok) {
+            if (targetUrl.endsWith('.js')) {
+                res.setHeader('Content-Type', 'application/javascript');
+                return res.status(200).send('console.log("Ad script bypassed");');
+            }
+            if (targetUrl.endsWith('.css')) {
+                res.setHeader('Content-Type', 'text/css');
+                return res.status(200).send('/* Bypassed */');
+            }
+            throw new Error('Not found');
+        }
+
         const contentType = response.headers.get('content-type') || '';
         res.setHeader('Content-Type', contentType);
-        res.setHeader('Cache-Control', 'public, max-age=86400');
 
-        // CSSの中身を書き換え
         if (contentType.includes('text/css')) {
             let cssText = await response.text();
             cssText = cssText.replace(/url\(["']?([^"')]+)["']?\)/g, (match, p1) => {
@@ -29,10 +40,11 @@ export default async function handler(req, res) {
             return res.send(cssText);
         }
 
-        // JSや画像などはそのまま転送（JSを消さないことで警告を回避）
         const buffer = await response.arrayBuffer();
         res.send(Buffer.from(buffer));
     } catch (e) {
-        res.status(500).send(`Asset Error: ${e.message}`);
+        // 全てのエラーを「正常な空データ」にすり替える
+        res.setHeader('Content-Type', 'text/plain');
+        res.status(200).send(''); 
     }
 }
