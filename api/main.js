@@ -1,4 +1,4 @@
-import { decodeUrl, encodeUrl } from './utils.js';
+import { decodeUrl } from './utils.js';
 
 export default async function handler(req, res) {
     const { url } = req.query;
@@ -8,35 +8,32 @@ export default async function handler(req, res) {
         const targetUrl = decodeUrl(url);
         const targetObj = new URL(targetUrl);
 
-        // 1. オリジナルのリクエストを完全に模倣
+        // アメリカのVercelからターゲットへ「そのまま」リクエスト
         const response = await fetch(targetUrl, {
-            method: req.method,
             headers: {
-                'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
+                'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_4 like Mac OS X) AppleWebKit/605.1.15',
                 'Accept': '*/*',
-                'Accept-Language': 'ja-JP,ja;q=0.9',
                 'Referer': targetObj.origin + '/'
             }
         });
 
-        // 2. コンテンツタイプを引き継ぐ
         const contentType = response.headers.get('content-type') || '';
         res.setHeader('Content-Type', contentType);
 
-        // 3. HTMLの場合だけ、ベースURLを１行だけ挿入（破壊を最小限に）
+        // HTMLなら、ベースURLだけ指定して「あとはブラウザ任せ」にする
         if (contentType.includes('text/html')) {
             let html = await response.text();
-            // リンクを書き換えず、ブラウザに「このページはGame8にあるんだよ」と思わせる
-            const baseTag = `<head><base href="${targetObj.origin}/"><script>window.onerror=()=>true;</script>`;
-            html = html.replace('<head>', baseTag);
-            return res.send(html);
+            // これだけで画像やCSSは自動的に正規の場所（game8.jp等）から読み込まれます
+            // ※学校の制限がURL（game8.jp）にかかっている場合は、ここだけ修正が必要です。
+            const baseTag = `<head><base href="${targetObj.origin}/">`;
+            return res.send(html.replace('<head>', baseTag));
         }
 
-        // 4. 画像・JS・CSSなどは、一切加工せずにそのまま流す（バイナリ転送）
+        // 画像などはそのまま流す
         const buffer = await response.arrayBuffer();
         res.send(Buffer.from(buffer));
 
     } catch (e) {
-        res.status(500).send(`Proxy Error: ${e.message}`);
+        res.status(500).send(`Error: ${e.message}`);
     }
 }
