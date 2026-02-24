@@ -3,45 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Proxy Portal</title>
+    <title>Stealth Portal</title>
     <style>
-        body { background: #000; color: #0f0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; font-family: sans-serif; }
-        .box { width: 90%; max-width: 400px; text-align: center; }
-        input { width: 100%; padding: 15px; margin-bottom: 15px; border: 1px solid #0f0; background: #000; color: #0f0; border-radius: 8px; font-size: 16px; box-sizing: border-box; outline: none; }
-        button { width: 100%; padding: 15px; background: #0f0; color: #000; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 16px; }
-        button:active { opacity: 0.7; }
+        body { background: #0f0f0f; color: #32d74b; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; font-family: 'SF Pro Display', sans-serif; }
+        .box { width: 85%; max-width: 500px; text-align: center; background: #1a1a1a; padding: 40px; border-radius: 20px; border: 1px solid #333; }
+        input { width: 100%; padding: 18px; border-radius: 12px; border: 1px solid #333; background: #000; color: #fff; font-size: 18px; margin-bottom: 20px; box-sizing: border-box; outline: none; }
+        button { width: 100%; padding: 18px; border-radius: 12px; border: none; background: #32d74b; color: #000; font-weight: bold; font-size: 18px; cursor: pointer; transition: 0.2s; }
+        button:active { transform: scale(0.98); opacity: 0.8; }
     </style>
 </head>
 <body>
     <div class="box">
-        <h3>Enter URL</h3>
-        <input type="text" id="target" placeholder="example.com" inputmode="url" spellcheck="false">
-        <button type="button" id="goBtn">Launch</button>
+        <h2 style="margin-top:0">Stealth Browser</h2>
+        <input type="text" id="target" placeholder="https://youtube.com" inputmode="url" spellcheck="false">
+        <button type="button" id="go">Launch</button>
     </div>
-
     <script>
-        // ボタンと入力欄の取得
-        const btn = document.getElementById('goBtn');
+        const btn = document.getElementById('go');
         const input = document.getElementById('target');
 
         const launch = () => {
             let val = input.value.trim();
             if (!val) return;
             if (!val.startsWith('http')) val = 'https://' + val;
-            
-            // Base64で難読化してリダイレクト
-            const encoded = btoa(val).replace(/\//g, '_').replace(/\+/g, '-');
+            const encoded = btoa(unescape(encodeURIComponent(val))).replace(/\//g, '_').replace(/\+/g, '-');
             window.location.href = `/view/${encoded}`;
         };
 
-        // iPadでのEnterキー誤動作防止
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
-                e.preventDefault(); 
+                e.preventDefault(); // iPadでの検索実行を防止
                 launch();
             }
         });
-
         btn.addEventListener('click', launch);
     </script>
 </body>
