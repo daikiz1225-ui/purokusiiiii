@@ -1,0 +1,36 @@
+document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('goBtn');
+    const input = document.getElementById('urlInput');
+
+    if (!btn || !input) {
+        console.error("要素が見つかりません。HTMLのIDを確認してください。");
+        return;
+    }
+
+    const launch = () => {
+        let url = input.value.trim();
+        if (!url) return;
+        
+        if (!url.startsWith('http')) {
+            url = 'https://' + url;
+        }
+
+        // URLをBase64で難読化（i-FILTER対策）
+        try {
+            const encoded = btoa(url).replace(/\//g, '_').replace(/\+/g, '-');
+            window.location.href = `/view/${encoded}`;
+        } catch (e) {
+            alert("URLの形式が正しくありません。");
+        }
+    };
+
+    btn.addEventListener('click', launch);
+
+    // iPad/iPhoneでのEnterキー検索（フォーム送信）を確実にブロック
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault(); 
+            launch();
+        }
+    });
+});
