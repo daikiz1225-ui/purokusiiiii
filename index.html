@@ -3,62 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Vercel Proxy Terminal</title>
+    <title>Safe Portal</title>
     <style>
-        body {
-            margin: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            background: #000;
-            color: #00ff41;
-            font-family: 'Courier New', Courier, monospace;
-        }
-        .proxy-box {
-            width: 90%;
-            max-width: 600px;
-            text-align: center;
-            padding: 20px;
-            border: 1px solid #00ff41;
-            box-shadow: 0 0 15px rgba(0, 255, 65, 0.2);
-        }
-        input {
-            width: 80%;
-            padding: 15px;
-            background: #111;
-            border: 1px solid #00ff41;
-            color: #00ff41;
-            font-size: 1.2rem;
-            margin-bottom: 20px;
-            outline: none;
-            border-radius: 8px; /* iPadで押しやすく */
-        }
-        button {
-            padding: 15px 40px;
-            background: #00ff41;
-            color: #000;
-            border: none;
-            font-weight: bold;
-            font-size: 1.1rem;
-            cursor: pointer;
-            border-radius: 8px;
-            transition: 0.3s;
-        }
-        button:active {
-            transform: scale(0.95);
-            background: #008f11;
-        }
+        body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #1a1a1a; color: #fff; font-family: sans-serif; }
+        .box { width: 90%; max-width: 500px; text-align: center; }
+        input { width: 100%; padding: 15px; border-radius: 10px; border: none; font-size: 1.1rem; margin-bottom: 20px; box-sizing: border-box; }
+        button { width: 100%; padding: 15px; border-radius: 10px; border: none; background: #32d74b; color: #000; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
-    <div class="proxy-box">
-        <h2>Enter Destination URL</h2>
-        <input type="text" id="targetUrl" placeholder="example.com" inputmode="url">
-        <br>
-        <button type="button" id="launchBtn">Go to Proxy</button>
+    <div class="box">
+        <h2>Enter URL</h2>
+        <input type="text" id="urlInput" placeholder="https://example.com" inputmode="url">
+        <button type="button" id="goBtn">Launch Stealth Mode</button>
     </div>
-
-    <script src="proxy-handler.js"></script>
+    <script src="encoder.js"></script>
 </body>
 </html>
