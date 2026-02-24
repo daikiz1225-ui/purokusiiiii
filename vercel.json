@@ -1,8 +1,8 @@
 {
   "rewrites": [
     {
-      "source": "/proxy/:url*",
-      "destination": "https://:url*"
+      "source": "/view/:encodedUrl*",
+      "destination": "/api/proxy?url=:encodedUrl*"
     }
   ]
 }
