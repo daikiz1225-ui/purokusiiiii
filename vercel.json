@@ -1,8 +1,12 @@
 {
   "rewrites": [
     {
-      "source": "/view/:encodedUrl*",
-      "destination": "/api/proxy?url=:encodedUrl*"
+      "source": "/view/:path*",
+      "destination": "/api/proxy?url=:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/public/$1"
     }
   ]
 }
