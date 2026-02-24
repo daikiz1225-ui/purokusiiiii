@@ -1,24 +1,20 @@
-document.getElementById('launchBtn').addEventListener('click', function() {
-    launchProxy();
-});
-
-// Enterキーでの自動検索（フォーム送信）を防止しつつ、
-// もしEnterを押した場合は関数を呼ぶだけにする（ページ更新を防ぐ）
-document.getElementById('targetUrl').addEventListener('keydown', function(e) {
+document.getElementById('goBtn').addEventListener('click', launch);
+document.getElementById('urlInput').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
-        e.preventDefault(); // 検索機能をトリガーさせない
-        launchProxy();
+        e.preventDefault(); // Enterキーでの標準検索を阻止
+        launch();
     }
 });
 
-function launchProxy() {
-    const urlInput = document.getElementById('targetUrl').value.trim();
-    if (!urlInput) {
-        alert('URLを入力してください');
-        return;
+function launch() {
+    let url = document.getElementById('urlInput').value.trim();
+    if (!url) return;
+    
+    if (!url.startsWith('http')) {
+        url = 'https://' + url;
     }
 
-    // http:// などを除去してパスに結合
-    const cleanUrl = urlInput.replace(/^https?:\/\//, '');
-    window.location.href = `/proxy/${cleanUrl}`;
+    // URLをBase64でぐちゃぐちゃにする (btoa関数を使用)
+    const encoded = btoa(url).replace(/\//g, '_').replace(/\+/g, '-');
+    window.location.href = `/view/${encoded}`;
 }
