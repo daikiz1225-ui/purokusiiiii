@@ -14,8 +14,7 @@ export default async function handler(req, res) {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_4 like Mac OS X) AppleWebKit/605.1.15',
                 'Referer': targetObj.origin + '/',
-                'Origin': targetObj.origin,
-                'Cookie': req.headers.cookie || ''
+                'Origin': targetObj.origin
             }
         });
 
@@ -26,57 +25,77 @@ export default async function handler(req, res) {
         if (contentType.includes('text/html')) {
             let html = await response.text();
 
-            const toProxyUrl = (link) => {
-                if (!link || link.startsWith('data:') || link.startsWith('javascript:') || link.startsWith('#')) return link;
-                try {
-                    const abs = new URL(link, targetUrl).href;
-                    const b64 = btoa(unescape(encodeURIComponent(abs))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-                    return `/api/proxy?url=${b64}`;
-                } catch (e) { return link; }
-            };
-
-            // 1. 基本の書き換え
-            html = html.replace(/(href|src|data-src|action)=["']([^"']+)["']/gi, (m, attr, link) => `${attr}="${toProxyUrl(link)}"`);
-
-            // 2. JavaScriptのジャンプ機能を「プロキシ化」する魔法
+            // URL変換用の関数を共通化してHTMLのトップに仕込む
             const injector = `
                 <head>
                 <script>
-                // URLをプロキシ用に変換する共通関数
-                const p = (u) => {
-                    if(!u || typeof u !== 'string' || u.includes('/api/proxy')) return u;
-                    try {
-                        const abs = new URL(u, location.href).href;
-                        return '/api/proxy?url=' + btoa(unescape(encodeURIComponent(abs))).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
-                    } catch(e) { return u; }
-                };
+                (function() {
+                    const targetBase = "${targetObj.origin}";
+                    const currentTargetUrl = "${targetUrl}";
 
-                // window.open を横取り
-                const _open = window.open;
-                window.open = (u, n, f) => _open(p(u), n, f);
+                    const toProxy = (u) => {
+                        if (!u || typeof u !== 'string' || u.startsWith('data:') || u.startsWith('javascript:') || u.includes('/api/proxy')) return u;
+                        try {
+                            const abs = new URL(u, currentTargetUrl).href;
+                            return '/api/proxy?url=' + btoa(unescape(encodeURIComponent(abs))).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
+                        } catch(e) { return u; }
+                    };
 
-                // location.assign と replace を横取り
-                const _assign = location.assign;
-                location.assign = (u) => window.location.href = p(u);
-                location.replace = (u) => window.location.href = p(u);
+                    // JavaScriptによるURL移動をすべてプロキシ経由に強制
+                    const originalLocation = window.location.href;
+                    Object.defineProperty(window, 'location', {
+                        configurable: true,
+                        enumerable: true,
+                        get: () => window.document.location,
+                        set: (v) => { window.document.location.href = toProxy(v); }
+                    });
 
-                // 全てのクリックを監視して、漏れがあればプロキシへ
-                document.addEventListener('click', e => {
-                    const a = e.target.closest('a');
-                    if (a && a.href && !a.href.includes('/api/proxy')) {
-                        e.preventDefault();
-                        window.location.href = p(a.href);
-                    }
-                }, true);
+                    // リンク、フォーム送信の横取り
+                    document.addEventListener('click', e => {
+                        const a = e.target.closest('a');
+                        if (a && a.href) {
+                            e.preventDefault();
+                            window.top.location.href = toProxy(a.href);
+                        }
+                    }, true);
+
+                    document.addEventListener('submit', e => {
+                        const f = e.target;
+                        if (f.method.toLowerCase() === 'get') {
+                            e.preventDefault();
+                            const params = new URLSearchParams(new FormData(f)).toString();
+                            window.location.href = toProxy(f.action + (f.action.includes('?') ? '&' : '?') + params);
+                        }
+                    }, true);
+
+                    // XMLHttpRequestとFetchの横取り（ゲームのデータ通信用）
+                    const _open = XMLHttpRequest.prototype.open;
+                    XMLHttpRequest.prototype.open = function(m, u) { return _open.apply(this, [m, toProxy(u)]); };
+                    
+                    const _fetch = window.fetch;
+                    window.fetch = (u, o) => _fetch(toProxy(u), o);
+                })();
                 </script>
             `;
-            html = html.replace('<head>', injector);
-            html = html.replace(/<base[^>]*>/gi, '');
+            
+            // HTML内の物理的なリンクも書き換える
+            const toProxyUrl = (link) => {
+                try {
+                    const abs = new URL(link, targetUrl).href;
+                    return '/api/proxy?url=' + btoa(unescape(encodeURIComponent(abs))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+                } catch(e) { return link; }
+            };
+            
+            html = html.replace(/(href|src|action)=["']([^"']+)["']/gi, (m, attr, link) => {
+                if(link.startsWith('#') || link.startsWith('javascript:')) return m;
+                return \`\${attr}="\${toProxyUrl(link)}"\`;
+            });
 
+            html = html.replace('<head>', injector);
             return res.send(html);
         }
 
-        // 画像などはストリーミング
+        // バイナリデータ（画像など）はストリーム
         const reader = response.body.getReader();
         while (true) {
             const { done, value } = await reader.read();
