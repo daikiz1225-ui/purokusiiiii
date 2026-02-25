@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>NextGen Proxy</title>
+    <script>
+        // 1. Service Workerを登録する
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').then(() => {
+                console.log('門番（SW）の登録に成功しました');
+            });
+        }
+
+        async function launch() {
+            const url = document.getElementById('url').value;
+            const encoded = btoa(url).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            // 最初の入り口だけ飛ばす。あとはSWが自動で全通信を処理する
+            window.location.href = `/api/proxy?url=${encoded}`;
+        }
+    </script>
+</head>
+<body>
+    <input type="text" id="url" placeholder="https://game8.jp">
+    <button onclick="launch()">閲覧開始</button>
+</body>
+</html>
