@@ -1,15 +1,26 @@
-// Service Worker: iPad内部で全通信をインターセプトする
-self.addEventListener('fetch', (event) => {
-    const url = new URL(event.request.url);
+// 登録時に自分を最新版にアップデート
+self.addEventListener('install', () => self.skipWaiting());
 
-    // 自分のドメイン(vercel)以外のリクエスト、または/view/以外のリクエストを対象にする
-    if (!url.hostname.includes(location.hostname)) {
-        // 全てのリクエストを暗号化して、自分のAPI経由に飛ばし直す
-        const targetUrl = event.request.url;
-        const encodedUrl = btoa(targetUrl).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-        
-        event.respondWith(
-            fetch(`/api/proxy?url=${encodedUrl}`)
-        );
+self.addEventListener('fetch', (event) => {
+    const request = event.request;
+    const url = new URL(request.url);
+
+    // Vercel内のAPIや内部ファイルへのアクセスはスルーする
+    if (url.origin === location.origin && !url.pathname.startsWith('/api/proxy')) {
+        return;
     }
+
+    // 外部（game8等）へのリクエストを全て検知
+    const targetUrl = request.url;
+    const encoded = btoa(unescape(encodeURIComponent(targetUrl)))
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+    event.respondWith(
+        fetch(`/api/proxy?url=${encoded}`, {
+            headers: request.headers,
+            method: request.method,
+            // POSTリクエストなどのボディも転送（ログインに必要）
+            body: request.method !== 'GET' && request.method !== 'HEAD' ? request.clone().blob() : undefined
+        })
+    );
 });
