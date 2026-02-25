@@ -1,53 +1,66 @@
-import { decodeUrl } from './utils.js';
-
 export default async function handler(req, res) {
     const { url } = req.query;
-    if (!url) return res.status(400).send('URL missing');
 
-    const targetUrl = Buffer.from(url.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString();
-    const targetObj = new URL(targetUrl);
+    // 1. URLがない場合のガード
+    if (!url) {
+        return res.status(400).send('URL parameter is required');
+    }
 
     try {
-        // 1. リクエストヘッダーの模倣
-        const requestHeaders = { ...req.headers };
-        delete requestHeaders.host;
-        delete requestHeaders.connection;
-        requestHeaders['origin'] = targetObj.origin;
-        requestHeaders['referer'] = targetObj.origin + '/';
-        requestHeaders['user-agent'] = 'Mozilla/5.0 (iPad; CPU OS 17_4 like Mac OS X) AppleWebKit/605.1.15';
+        // 2. Base64デコード処理 (utils.jsを使わずに直接実装)
+        const encoded = url.replace(/-/g, '+').replace(/_/g, '/');
+        const targetUrl = Buffer.from(encoded, 'base64').toString('utf-8');
+        const targetObj = new URL(targetUrl);
 
+        // 3. リクエストヘッダーの構築
+        const headers = new Headers();
+        const skipHeaders = ['host', 'connection', 'x-vercel-id', 'x-real-ip', 'x-forwarded-for'];
+        
+        Object.entries(req.headers).forEach(([key, value]) => {
+            if (!skipHeaders.includes(key.toLowerCase())) {
+                headers.set(key, value);
+            }
+        });
+
+        // 偽装の仕上げ
+        headers.set('User-Agent', 'Mozilla/5.0 (iPad; CPU OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1');
+        headers.set('Referer', targetObj.origin + '/');
+        headers.set('Origin', targetObj.origin);
+
+        // 4. ターゲットサイトへリクエスト (アメリカ経由)
         const response = await fetch(targetUrl, {
             method: req.method,
-            headers: requestHeaders,
-            body: req.method !== 'GET' && req.method !== 'HEAD' ? req.body : undefined,
+            headers: headers,
+            // GET以外の場合はボディを送る
+            body: (req.method !== 'GET' && req.method !== 'HEAD') ? JSON.stringify(req.body) : undefined,
             redirect: 'follow'
         });
 
-        // 2. レスポンスヘッダーのクリーンアップ
-        const forbiddenHeaders = [
-            'content-security-policy',
-            'content-security-policy-report-only',
-            'x-frame-options',
-            'strict-transport-security',
-            'content-encoding' // Vercelが自動で圧縮するため
-        ];
-
+        // 5. レスポンスヘッダーの処理
+        const responseHeaders = {};
+        const blockHeaders = ['content-security-policy', 'x-frame-options', 'content-encoding', 'transfer-encoding'];
+        
         response.headers.forEach((value, key) => {
-            if (!forbiddenHeaders.includes(key.toLowerCase())) {
+            if (!blockHeaders.includes(key.toLowerCase())) {
                 res.setHeader(key, value);
             }
         });
 
-        // CORSを許可して、iPad内部での通信をスムーズにする
+        // CORS許可（iPad内のService Workerが読み込めるように）
         res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 
-        // 3. バイナリデータをストリーミングで送信
+        // 6. データの送信
+        const contentType = response.headers.get('content-type') || '';
         const buffer = await response.arrayBuffer();
+        
         res.status(response.status).send(Buffer.from(buffer));
 
-    } catch (e) {
-        console.error('Proxy Engine Error:', e);
-        res.status(500).send(`Engine Error: ${e.message}`);
+    } catch (error) {
+        console.error('Proxy Error:', error);
+        res.status(500).json({
+            error: 'Internal Proxy Error',
+            message: error.message,
+            stack: error.stack
+        });
     }
 }
