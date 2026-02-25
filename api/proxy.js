@@ -20,24 +20,45 @@ export default async function handler(req, res) {
         res.setHeader('Content-Type', contentType);
         res.setHeader('Access-Control-Allow-Origin', '*');
 
-        // --- HTMLの場合：サイト内移動ができるようにリンクを書き換える ---
         if (contentType.includes('text/html')) {
             let html = await response.text();
-            
-            // リンク(href)をプロキシ経由に書き換える（サイト内移動対策）
-            html = html.replace(/(href)=["'](https?:\/\/[^"']+)["']/gi, (m, attr, link) => {
-                const encodedLink = Buffer.from(link).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-                return `${attr}="/api/proxy?url=${encodedLink}"`;
+
+            // 相対パスを絶対パスにしてからプロキシURLに変換する魔法の関数
+            const toProxyUrl = (link) => {
+                if (link.startsWith('data:') || link.startsWith('javascript:') || link.startsWith('#')) return link;
+                try {
+                    const absoluteUrl = new URL(link, targetUrl).href;
+                    const encodedLink = Buffer.from(absoluteUrl).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+                    return `/api/proxy?url=${encodedLink}`;
+                } catch (e) {
+                    return link;
+                }
+            };
+
+            // href(リンク), src(画像), data-src(遅延読み込み画像) をすべてプロキシ経由に！
+            html = html.replace(/(href|src|data-src)=["']([^"']+)["']/gi, (match, attr, link) => {
+                return `${attr}="${toProxyUrl(link)}"`;
             });
 
-            // ベースURLを埋め込んで相対パスの崩れを防ぐ
-            const baseTag = `<head><base href="${targetObj.origin}/"><script>window.onerror=()=>true;</script>`;
-            html = html.replace('<head>', baseTag);
+            // srcset(複数サイズの画像指定) の書き換え (Game8対策)
+            html = html.replace(/srcset=["']([^"']+)["']/gi, (match, links) => {
+                const newLinks = links.split(',').map(part => {
+                    const [imgUrl, size] = part.trim().split(/\s+/);
+                    if (!imgUrl) return part;
+                    return `${toProxyUrl(imgUrl)}${size ? ' ' + size : ''}`;
+                }).join(', ');
+                return `srcset="${newLinks}"`;
+            });
+
+            // プロキシの邪魔になるbaseタグを消す
+            html = html.replace(/<base[^>]*>/gi, '');
+            // エラー無視のおまじない
+            html = html.replace('<head>', '<head><script>window.onerror=()=>true;</script>');
 
             return res.send(html);
         }
 
-        // --- 画像やその他の場合：安定して流し込む ---
+        // 画像などのデータはそのままiPadへ流す
         const buffer = await response.arrayBuffer();
         res.send(Buffer.from(buffer));
 
