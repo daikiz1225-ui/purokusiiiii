@@ -9,70 +9,84 @@ export default async function handler(req, res) {
         
         const response = await fetch(targetUrl, {
             headers: {
-                'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_4 like Mac OS X) AppleWebKit/605.1.15',
+                'User-Agent': req.headers['user-agent'], // iPadのUAをそのまま通す
+                'Accept': req.headers['accept'],
+                'Accept-Language': req.headers['accept-language'],
                 'Referer': targetObj.origin + '/',
-                'Cookie': req.headers.cookie || ''
             }
         });
 
-        let contentType = response.headers.get('content-type') || '';
+        const contentType = response.headers.get('content-type') || '';
         res.setHeader('Content-Type', contentType);
         res.setHeader('Access-Control-Allow-Origin', '*');
 
-        // URL変換用の関数（サーバーサイド）
-        const toProxy = (link) => {
-            try {
-                const abs = new URL(link, targetUrl).href;
-                const b64 = Buffer.from(abs).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-                return `/api/proxy?url=${b64}&mode=${mode}`;
-            } catch(e) { return link; }
-        };
-
-        // HTMLまたはJavaScriptの場合、中身を書き換える
-        if (contentType.includes('text/html') || contentType.includes('application/javascript') || contentType.includes('text/javascript')) {
-            let content = await response.text();
-
-            if (mode === 'power') {
-                // 【最強置換】スクリプト内の引用符に囲まれたURLっぽい文字列を強引に書き換える
-                // 例: "stage1.html" -> "/api/proxy?url=..."
-                content = content.replace(/(["'])(https?:\/\/[^"']+|(?:\/|\.\/)[^"']+\.(?:html|php|js|png|jpg))(["'])/gi, (m, q1, link, q2) => {
-                    return `${q1}${toProxy(link)}${q2}`;
-                });
-            } else {
-                // 通常モード: HTMLタグの属性のみ
-                content = content.replace(/(href|src|action)=["']([^"']+)["']/gi, (m, attr, link) => {
-                    if (link.startsWith('#') || link.startsWith('javascript:')) return m;
-                    return `${attr}="${toProxy(link)}"`;
-                });
-            }
-
-            // HTMLの場合のみ、追加のスクリプトを注入
-            if (contentType.includes('text/html')) {
-                const injector = `
-                    <head>
-                    <script>
-                    // 予備：動的に生成される要素への対策
-                    document.addEventListener('click', e => {
-                        const a = e.target.closest('a');
-                        if (a && a.href && !a.href.includes('/api/proxy')) {
-                            e.preventDefault();
-                            const b64 = btoa(unescape(encodeURIComponent(a.href))).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
-                            window.location.href = '/api/proxy?url=' + b64 + '&mode=${mode}';
-                        }
-                    }, true);
-                    </script>
-                `;
-                content = content.replace('<head>', injector);
-            }
-
-            return res.send(content);
+        // HTML以外（JS本体など）は一切書き換えずにそのまま返す（ブロック回避）
+        if (!contentType.includes('text/html')) {
+            const buffer = await response.arrayBuffer();
+            return res.send(Buffer.from(buffer));
         }
 
-        // その他（画像など）
-        const buffer = await response.arrayBuffer();
-        res.send(Buffer.from(buffer));
+        // HTMLの場合のみ、通信の「仕組み」を差し替える隠密スクリプトを注入
+        let html = await response.text();
+        
+        const injector = `
+            <head>
+            <script>
+            (function() {
+                const P_URL = (u) => {
+                    if(!u || typeof u !== 'string' || u.startsWith('data:') || u.includes('/api/proxy')) return u;
+                    try {
+                        const abs = new URL(u, "${targetUrl}").href;
+                        return '/api/proxy?url=' + btoa(unescape(encodeURIComponent(abs))).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '') + '&mode=${mode}';
+                    } catch(e) { return u; }
+                };
+
+                // 1. Fetchの偽装
+                const _f = window.fetch;
+                window.fetch = function(u, o) { return _f(P_URL(u), o); };
+
+                // 2. XMLHttpRequestの偽装
+                const _o = XMLHttpRequest.prototype.open;
+                XMLHttpRequest.prototype.open = function(m, u, a, r, p) {
+                    return _o.apply(this, [m, P_URL(u), a, r, p]);
+                };
+
+                // 3. ビーコンや画像生成の偽装
+                const _I = window.Image;
+                window.Image = function() {
+                    const i = new _I();
+                    const setter = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src').set;
+                    Object.defineProperty(i, 'src', { set: function(v) { setter.call(this, P_URL(v)); } });
+                    return i;
+                };
+
+                // 4. クリックによる遷移の強制プロキシ化
+                document.addEventListener('click', e => {
+                    const a = e.target.closest('a');
+                    if (a && a.href && !a.href.includes('/api/proxy')) {
+                        e.preventDefault();
+                        window.location.href = P_URL(a.href);
+                    }
+                }, true);
+            })();
+            </script>
+        `;
+
+        // 物理的なタグの書き換えも、botがチェックしにくい「href」と「src」だけに限定
+        html = html.replace(/(href|src)=["']([^"']+)["']/gi, (m, attr, link) => {
+            if (link.startsWith('http') || link.startsWith('/') || link.startsWith('./')) {
+                // ここでURL変換
+                const abs = new URL(link, "${targetUrl}").href;
+                const b64 = Buffer.from(abs).toString('base64').replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
+                return \`\${attr}="/api/proxy?url=\${b64}&mode=${mode}"\`;
+            }
+            return m;
+        });
+
+        html = html.replace('<head>', injector);
+        res.send(html);
 
     } catch (error) {
-        res.status(500).send('Proxy Error: ' + error.message);
+        res.status(500).send('Proxy Stealth Error: ' + error.message);
     }
 }
