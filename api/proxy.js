@@ -12,73 +12,63 @@ export default async function handler(req, res) {
                 'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_4 like Mac OS X) AppleWebKit/605.1.15',
                 'Referer': targetObj.origin + '/',
                 'Cookie': req.headers.cookie || ''
-            },
-            redirect: 'follow'
+            }
         });
 
-        const contentType = response.headers.get('content-type') || '';
+        let contentType = response.headers.get('content-type') || '';
         res.setHeader('Content-Type', contentType);
         res.setHeader('Access-Control-Allow-Origin', '*');
 
-        if (contentType.includes('text/html')) {
-            let html = await response.text();
+        // URL変換用の関数（サーバーサイド）
+        const toProxy = (link) => {
+            try {
+                const abs = new URL(link, targetUrl).href;
+                const b64 = Buffer.from(abs).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+                return `/api/proxy?url=${b64}&mode=${mode}`;
+            } catch(e) { return link; }
+        };
 
-            const toProxy = (link) => {
-                try {
-                    const abs = new URL(link, targetUrl).href;
-                    const b64 = Buffer.from(abs).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-                    return `/api/proxy?url=${b64}&mode=${mode}`;
-                } catch(e) { return link; }
-            };
-
-            // 1. 全モード共通: href, src, action の書き換え
-            html = html.replace(/(href|src|action)=["']([^"']+)["']/gi, (m, attr, link) => {
-                if (link.startsWith('#') || link.startsWith('javascript:')) return m;
-                return `${attr}="${toProxy(link)}"`;
-            });
-
-            // 2. パワーモードのみ: スクリプト注入
-            let injector = `
-                <head>
-                <script>
-                const toP = (u) => {
-                    if(!u || typeof u !== 'string' || u.includes('/api/proxy')) return u;
-                    try {
-                        const abs = new URL(u, location.href).href;
-                        return '/api/proxy?url=' + btoa(unescape(encodeURIComponent(abs))).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '') + '&mode=${mode}';
-                    } catch(e) { return u; }
-                };
-            `;
+        // HTMLまたはJavaScriptの場合、中身を書き換える
+        if (contentType.includes('text/html') || contentType.includes('application/javascript') || contentType.includes('text/javascript')) {
+            let content = await response.text();
 
             if (mode === 'power') {
-                injector += `
-                // JS遷移の横取り
-                const _o = window.open; window.open = (u,n,f) => _o(toP(u),n,f);
-                const _f = window.fetch; window.fetch = (u,o) => _f(toP(u),o);
-                // locationプロパティの簡易監視
-                setInterval(() => {
-                    document.querySelectorAll('a').forEach(a => {
-                        if(a.href && !a.href.includes('/api/proxy')) a.href = toP(a.href);
-                    });
-                }, 1000);
-                `;
+                // 【最強置換】スクリプト内の引用符に囲まれたURLっぽい文字列を強引に書き換える
+                // 例: "stage1.html" -> "/api/proxy?url=..."
+                content = content.replace(/(["'])(https?:\/\/[^"']+|(?:\/|\.\/)[^"']+\.(?:html|php|js|png|jpg))(["'])/gi, (m, q1, link, q2) => {
+                    return `${q1}${toProxy(link)}${q2}`;
+                });
+            } else {
+                // 通常モード: HTMLタグの属性のみ
+                content = content.replace(/(href|src|action)=["']([^"']+)["']/gi, (m, attr, link) => {
+                    if (link.startsWith('#') || link.startsWith('javascript:')) return m;
+                    return `${attr}="${toProxy(link)}"`;
+                });
             }
 
-            injector += `
-                document.addEventListener('click', e => {
-                    const a = e.target.closest('a');
-                    if (a && a.href && !a.href.includes('/api/proxy')) {
-                        e.preventDefault();
-                        window.location.href = toP(a.href);
-                    }
-                }, true);
-                </script>
-            `;
-            
-            html = html.replace('<head>', injector);
-            return res.send(html);
+            // HTMLの場合のみ、追加のスクリプトを注入
+            if (contentType.includes('text/html')) {
+                const injector = `
+                    <head>
+                    <script>
+                    // 予備：動的に生成される要素への対策
+                    document.addEventListener('click', e => {
+                        const a = e.target.closest('a');
+                        if (a && a.href && !a.href.includes('/api/proxy')) {
+                            e.preventDefault();
+                            const b64 = btoa(unescape(encodeURIComponent(a.href))).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
+                            window.location.href = '/api/proxy?url=' + b64 + '&mode=${mode}';
+                        }
+                    }, true);
+                    </script>
+                `;
+                content = content.replace('<head>', injector);
+            }
+
+            return res.send(content);
         }
 
+        // その他（画像など）
         const buffer = await response.arrayBuffer();
         res.send(Buffer.from(buffer));
 
