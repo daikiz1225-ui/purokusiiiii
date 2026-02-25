@@ -3,140 +3,120 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>本格 焼き鳥串刺し体験</title>
+    <title>本格 焼き鳥串刺し体験 | 伝統の技を学ぶ</title>
     <style>
-        body {
+        body, html {
             margin: 0;
             padding: 0;
-            font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
-            background: url('/bg.jpg') no-repeat center center fixed;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+        }
+
+        /* 焼き鳥おじさん背景 */
+        .background-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url('/bg.jpg') no-repeat center center;
             background-size: cover;
-            height: 100vh;
+            z-index: 1;
+        }
+
+        /* 画像内の赤い枠の位置にボタンを配置するためのレイヤー */
+        .overlay-layer {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            height: 100%;
             display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        
-        .glass-panel {
-            background: rgba(0, 0, 0, 0.6);
-            padding: 3rem 2rem;
-            border-radius: 15px;
-            text-align: center;
-            color: white;
-            backdrop-filter: blur(5px);
-            width: 80%;
-            max-width: 400px;
+            flex-direction: column;
+            justify-content: flex-end; /* 下側に寄せる */
+            align-items: flex-start;  /* 左側に寄せる */
         }
 
-        h1 { font-size: 2rem; margin-bottom: 0.5rem; }
-        p { font-size: 1.1rem; margin-bottom: 2rem; }
-
+        /* 画像内の「お華如...」の赤い枠を隠すためのボタン */
         .apply-btn {
-            background: #b91c1c;
+            margin-left: 5%;   /* 画像内の枠の位置に合わせて微調整してください */
+            margin-bottom: 15%; /* 画像内の枠の位置に合わせて微調整してください */
+            padding: 15px 40px;
+            background-color: #b91c1c; /* 画像の赤に近い色 */
             color: white;
-            border: 2px solid #7f1d1d;
-            padding: 1rem 2rem;
-            font-size: 1.5rem;
-            font-family: inherit;
+            font-family: "Hiragino Mincho ProN", serif;
+            font-size: 1.8rem;
             font-weight: bold;
+            border: 2px solid #7f1d1d;
+            border-radius: 4px;
             cursor: pointer;
-            border-radius: 5px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            text-decoration: none;
             transition: transform 0.1s;
         }
+
         .apply-btn:active { transform: scale(0.95); }
 
+        /* パスワード入力モーダル */
         #passwordModal {
             display: none;
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8);
+            background: rgba(0,0,0,0.85);
             justify-content: center;
             align-items: center;
             z-index: 1000;
+            backdrop-filter: blur(8px);
         }
         
         .modal-content {
             background: #1e293b;
-            padding: 2rem;
-            border-radius: 10px;
+            padding: 2.5rem;
+            border-radius: 12px;
             text-align: center;
             color: white;
-            font-family: sans-serif;
-            width: 80%;
+            width: 85%;
             max-width: 320px;
-            transition: all 0.3s;
         }
 
         .modal-content input {
-            padding: 1rem;
-            font-size: 1.2rem;
-            width: 80%;
-            margin-bottom: 1rem;
-            border-radius: 5px;
+            padding: 12px;
+            font-size: 1.5rem;
+            width: 90%;
+            margin-bottom: 1.5rem;
+            border-radius: 8px;
             border: none;
             text-align: center;
-            letter-spacing: 0.5em;
+            background: #0f172a;
+            color: #38bdf8;
         }
 
-        .modal-content button {
-            background: #38bdf8;
-            color: #0f172a;
-            border: none;
-            padding: 0.8rem 2rem;
-            font-size: 1.1rem;
-            font-weight: bold;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-
-        /* 詐欺ドッキリ用の凶悪なスタイル */
+        /* 詐欺ドッキリ警告（中華風） */
         #scamAlert {
             display: none;
             background: #fff;
-            color: red;
+            color: #ff0000;
             padding: 1.5rem;
-            border: 5px solid red;
-            border-radius: 5px;
-            font-family: "MS PGothic", sans-serif; /* 古臭い中華サイト感を出す */
+            border: 6px double #ff0000;
+            font-family: "MS PGothic", "SimSun", sans-serif;
             text-align: left;
-            box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
-            animation: shake 0.5s infinite; /* 画面を小刻みに揺らす */
+            animation: shake 0.1s infinite;
         }
 
         @keyframes shake {
-            0% { transform: translate(1px, 1px) rotate(0deg); }
-            10% { transform: translate(-1px, -2px) rotate(-1deg); }
-            20% { transform: translate(-3px, 0px) rotate(1deg); }
-            30% { transform: translate(3px, 2px) rotate(0deg); }
-            40% { transform: translate(1px, -1px) rotate(1deg); }
-            50% { transform: translate(-1px, 2px) rotate(-1deg); }
-            60% { transform: translate(-3px, 1px) rotate(0deg); }
-            70% { transform: translate(3px, 1px) rotate(-1deg); }
-            80% { transform: translate(-1px, -1px) rotate(1deg); }
-            90% { transform: translate(1px, 2px) rotate(0deg); }
-            100% { transform: translate(1px, -2px) rotate(-1deg); }
+            0% { transform: translate(2px, 1px); }
+            50% { transform: translate(-2px, -1px); }
+            100% { transform: translate(1px, 2px); }
         }
 
-        .scam-text {
-            font-size: 1.2rem;
-            font-weight: 900;
-            line-height: 1.5;
-        }
-        .scam-title {
-            font-size: 1.5rem;
-            text-align: center;
-            border-bottom: 2px solid red;
-            margin-bottom: 1rem;
-            padding-bottom: 0.5rem;
-        }
+        .scam-title { font-size: 1.8rem; font-weight: bold; text-align: center; border-bottom: 3px solid red; margin-bottom: 10px; }
     </style>
     <script>
-        window.onload = function() {
-            if (localStorage.getItem('purokusiiiii_unlocked') === 'true') {
-                window.location.replace('/app.html');
-            }
-        };
+        // 解除済みならapp.htmlへ
+        if (localStorage.getItem('purokusiiiii_unlocked') === 'true') {
+            window.location.replace('/app.html');
+        }
 
         function openModal() {
             document.getElementById('passwordModal').style.display = 'flex';
@@ -148,40 +128,38 @@
                 localStorage.setItem('purokusiiiii_unlocked', 'true');
                 window.location.replace('/app.html');
             } else {
-                // ドッキリ発動！入力欄を消して詐欺警告を出す
+                // 詐欺ドッキリ発動
                 document.getElementById('normalLogin').style.display = 'none';
                 document.getElementById('scamAlert').style.display = 'block';
-                document.querySelector('.modal-content').style.background = 'transparent';
             }
         }
     </script>
 </head>
 <body>
 
-    <div class="glass-panel">
-        <h1>本格 焼き鳥体験</h1>
-        <p>参加者募集 伝統の技を競う</p>
+    <div class="background-container"></div>
+
+    <div class="overlay-layer">
         <button class="apply-btn" onclick="openModal()">お申し込みはこちら</button>
     </div>
 
     <div id="passwordModal">
         <div class="modal-content">
-            
             <div id="normalLogin">
-                <h3 style="margin-top:0;">関係者ログイン</h3>
-                <input type="password" id="passInput" placeholder="****">
-                <button onclick="checkPassword()">認証</button>
+                <h2 style="margin-top:0; color:#94a3b8; font-size:1rem;">ADMIN LOGIN</h2>
+                <input type="password" id="passInput" placeholder="●●●●">
+                <br>
+                <button onclick="checkPassword()" style="background:#38bdf8; border:none; padding:10px 30px; border-radius:5px; font-weight:bold; cursor:pointer;">認証実行</button>
             </div>
 
             <div id="scamAlert">
                 <div class="scam-title">⚠️ 登錄完了 ⚠️</div>
-                <div class="scam-text">
+                <div style="font-weight: bold; line-height: 1.4;">
                     お申込み完了シマシタ！<br><br>
-                    15時間以内へ<span style="font-size: 1.5rem;">56萬円</span>（講習代）をお支拂いくだサい。<br><br>
-                    ※未払のばあい、法的処置が執行します。IPアドレス取得済ミ。
+                    15時間以内へ <span style="font-size: 1.8rem;">56萬円</span> (講習代) をお支拂いくだサい。<br><br>
+                    ※未払の場合、法的処置を執行致シます。IPアドレス記録中...
                 </div>
             </div>
-
         </div>
     </div>
 
