@@ -8,31 +8,40 @@ export default async function handler(req, res) {
         const targetObj = new URL(targetUrl);
 
         const response = await fetch(targetUrl, {
-            method: req.method,
             headers: {
                 'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_4 like Mac OS X) AppleWebKit/605.1.15',
                 'Referer': targetObj.origin + '/',
                 'Origin': targetObj.origin,
-                'Cookie': req.headers.cookie || '' // クッキーをそのまま転送
-            },
-            redirect: 'follow'
+                'Cookie': req.headers.cookie || ''
+            }
         });
 
-        // 最小限のヘッダーのみ転送して高速化
-        const contentType = response.headers.get('content-type');
-        if (contentType) res.setHeader('Content-Type', contentType);
+        const contentType = response.headers.get('content-type') || '';
+        res.setHeader('Content-Type', contentType);
         res.setHeader('Access-Control-Allow-Origin', '*');
 
-        // ストリーミングでデータを即座に流し出す（これが最速）
-        const reader = response.body.getReader();
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            res.write(value);
+        // --- HTMLの場合：サイト内移動ができるようにリンクを書き換える ---
+        if (contentType.includes('text/html')) {
+            let html = await response.text();
+            
+            // リンク(href)をプロキシ経由に書き換える（サイト内移動対策）
+            html = html.replace(/(href)=["'](https?:\/\/[^"']+)["']/gi, (m, attr, link) => {
+                const encodedLink = Buffer.from(link).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+                return `${attr}="/api/proxy?url=${encodedLink}"`;
+            });
+
+            // ベースURLを埋め込んで相対パスの崩れを防ぐ
+            const baseTag = `<head><base href="${targetObj.origin}/"><script>window.onerror=()=>true;</script>`;
+            html = html.replace('<head>', baseTag);
+
+            return res.send(html);
         }
-        res.end();
+
+        // --- 画像やその他の場合：安定して流し込む ---
+        const buffer = await response.arrayBuffer();
+        res.send(Buffer.from(buffer));
 
     } catch (error) {
-        res.status(500).send('Speed Error: ' + error.message);
+        res.status(500).send('Proxy Error: ' + error.message);
     }
 }
