@@ -18,6 +18,8 @@ export default async function handler(req, res) {
             }
         });
 
+        if (!response.ok) throw new Error(`Target returned ${response.status}`);
+
         const contentType = response.headers.get('content-type') || '';
         res.setHeader('Content-Type', contentType);
         res.setHeader('Access-Control-Allow-Origin', '*');
@@ -25,86 +27,61 @@ export default async function handler(req, res) {
         if (contentType.includes('text/html')) {
             let html = await response.text();
 
-            // URL変換用の関数を共通化してHTMLのトップに仕込む
-            const injector = `
-                <head>
-                <script>
-                (function() {
-                    const targetBase = "${targetObj.origin}";
-                    const currentTargetUrl = "${targetUrl}";
-
-                    const toProxy = (u) => {
-                        if (!u || typeof u !== 'string' || u.startsWith('data:') || u.startsWith('javascript:') || u.includes('/api/proxy')) return u;
-                        try {
-                            const abs = new URL(u, currentTargetUrl).href;
-                            return '/api/proxy?url=' + btoa(unescape(encodeURIComponent(abs))).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
-                        } catch(e) { return u; }
-                    };
-
-                    // JavaScriptによるURL移動をすべてプロキシ経由に強制
-                    const originalLocation = window.location.href;
-                    Object.defineProperty(window, 'location', {
-                        configurable: true,
-                        enumerable: true,
-                        get: () => window.document.location,
-                        set: (v) => { window.document.location.href = toProxy(v); }
-                    });
-
-                    // リンク、フォーム送信の横取り
-                    document.addEventListener('click', e => {
-                        const a = e.target.closest('a');
-                        if (a && a.href) {
-                            e.preventDefault();
-                            window.top.location.href = toProxy(a.href);
-                        }
-                    }, true);
-
-                    document.addEventListener('submit', e => {
-                        const f = e.target;
-                        if (f.method.toLowerCase() === 'get') {
-                            e.preventDefault();
-                            const params = new URLSearchParams(new FormData(f)).toString();
-                            window.location.href = toProxy(f.action + (f.action.includes('?') ? '&' : '?') + params);
-                        }
-                    }, true);
-
-                    // XMLHttpRequestとFetchの横取り（ゲームのデータ通信用）
-                    const _open = XMLHttpRequest.prototype.open;
-                    XMLHttpRequest.prototype.open = function(m, u) { return _open.apply(this, [m, toProxy(u)]); };
-                    
-                    const _fetch = window.fetch;
-                    window.fetch = (u, o) => _fetch(toProxy(u), o);
-                })();
-                </script>
-            `;
-            
-            // HTML内の物理的なリンクも書き換える
+            // 変換ロジックをシンプルに
             const toProxyUrl = (link) => {
                 try {
                     const abs = new URL(link, targetUrl).href;
-                    return '/api/proxy?url=' + btoa(unescape(encodeURIComponent(abs))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+                    const b64 = Buffer.from(abs).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+                    return `/api/proxy?url=${b64}`;
                 } catch(e) { return link; }
             };
-            
+
+            // HTML内のリンクと画像を書き換え
             html = html.replace(/(href|src|action)=["']([^"']+)["']/gi, (m, attr, link) => {
-                if(link.startsWith('#') || link.startsWith('javascript:')) return m;
-                return \`\${attr}="\${toProxyUrl(link)}"\`;
+                if (link.startsWith('#') || link.startsWith('javascript:')) return m;
+                return `${attr}="${toProxyUrl(link)}"`;
             });
 
+            // 404防止用のスクリプト注入 (エラーが出にくい形式)
+            const injector = `
+                <head>
+                <script>
+                window._PROXY_BASE_ = "${targetObj.origin}";
+                
+                // クリックを横取りしてプロキシへ
+                document.addEventListener('click', e => {
+                    const a = e.target.closest('a');
+                    if (a && a.href && !a.href.includes('/api/proxy')) {
+                        e.preventDefault();
+                        const rawUrl = a.href;
+                        const b64 = btoa(unescape(encodeURIComponent(rawUrl))).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
+                        window.location.href = '/api/proxy?url=' + b64;
+                    }
+                }, true);
+
+                // fetchなどの通信をプロキシ経由にする(簡易版)
+                const _fetch = window.fetch;
+                window.fetch = function(u, o) {
+                    if (typeof u === 'string' && !u.includes('/api/proxy') && !u.startsWith('data:')) {
+                        const b64 = btoa(unescape(encodeURIComponent(new URL(u, location.href).href))).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
+                        u = '/api/proxy?url=' + b64;
+                    }
+                    return _fetch(u, o);
+                };
+                </script>
+            `;
             html = html.replace('<head>', injector);
+            html = html.replace(/<base[^>]*>/gi, '');
+
             return res.send(html);
         }
 
-        // バイナリデータ（画像など）はストリーム
-        const reader = response.body.getReader();
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            res.write(value);
-        }
-        res.end();
+        // 画像などはそのまま流す
+        const buffer = await response.arrayBuffer();
+        res.send(Buffer.from(buffer));
 
     } catch (error) {
-        res.status(500).send('Proxy Error: ' + error.message);
+        console.error(error);
+        res.status(500).send('Proxy Error (Stable Mode): ' + error.message);
     }
 }
