@@ -1,8 +1,0 @@
-{
-  "version": 2,
-  "rewrites": [
-    { "source": "/", "destination": "/public/index.html" },
-    { "source": "/view/:url", "destination": "/api/main.js?url=:url" },
-    { "source": "/asset/:url", "destination": "/api/main.js?url=:url" }
-  ]
-}
