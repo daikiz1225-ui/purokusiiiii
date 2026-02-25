@@ -6,7 +6,6 @@ export default async function handler(req, res) {
         const encoded = url.replace(/-/g, '+').replace(/_/g, '/');
         let targetUrl = Buffer.from(encoded, 'base64').toString('utf-8');
 
-        // URLに検索ワードなどを結合
         const targetObj = new URL(targetUrl);
         Object.keys(otherParams).forEach(key => {
             targetObj.searchParams.set(key, otherParams[key]);
@@ -26,6 +25,11 @@ export default async function handler(req, res) {
         const contentType = response.headers.get('content-type') || '';
         res.setHeader('Content-Type', contentType);
         res.setHeader('Access-Control-Allow-Origin', '*');
+        
+        // 画像などはキャッシュを効かせてラグを防止 (1時間)
+        if (!contentType.includes('text/html')) {
+            res.setHeader('Cache-Control', 'public, max-age=3600');
+        }
 
         if (contentType.includes('text/html')) {
             let html = await response.text();
@@ -41,24 +45,18 @@ export default async function handler(req, res) {
 
             html = html.replace(/(href|src|data-src|action)=["']([^"']+)["']/gi, (m, attr, link) => `${attr}="${toProxyUrl(link)}"`);
 
-            // 【重要】検索ボタンが押された時の挙動を修正
             const injector = `
                 <head>
                 <script>
                 document.addEventListener('submit', e => {
                     const form = e.target;
-                    // GET送信（検索など）の場合
                     if (form.method.toLowerCase() === 'get') {
                         e.preventDefault();
                         const formData = new FormData(form);
                         const params = new URLSearchParams(formData);
-                        
-                        // 現在のプロキシURL（Base64部分）を維持しつつ、検索パラメータを合体
                         const currentUrl = new URL(window.location.href);
-                        const baseUrl = currentUrl.origin + currentUrl.pathname;
                         const proxyUrlKey = currentUrl.searchParams.get('url');
-                        
-                        window.location.href = baseUrl + '?url=' + proxyUrlKey + '&' + params.toString();
+                        window.location.href = currentUrl.origin + currentUrl.pathname + '?url=' + proxyUrlKey + '&' + params.toString();
                     }
                 }, true);
                 window.onerror = () => true;
@@ -70,8 +68,14 @@ export default async function handler(req, res) {
             return res.send(html);
         }
 
-        const buffer = await response.arrayBuffer();
-        res.send(Buffer.from(buffer));
+        // --- 画像・動画：ストリーミングで流し込む（これがラグ対策のキモ） ---
+        const reader = response.body.getReader();
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            res.write(value); // 届いたデータから順に iPad へ送信
+        }
+        res.end();
 
     } catch (error) {
         res.status(500).send('Proxy Error: ' + error.message);
