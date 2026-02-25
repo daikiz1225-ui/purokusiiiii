@@ -5,36 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>purokusiiiii</title>
     <style>
-        /* 前回のCSSそのまま */
         body { margin: 0; background-color: #0f172a; color: #f8fafc; font-family: sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
         .container { text-align: center; width: 90%; max-width: 500px; }
-        h1 { font-size: 3rem; margin-bottom: 2rem; background: linear-gradient(to right, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800; }
+        h1 { font-size: 3rem; margin-bottom: 1rem; background: linear-gradient(to right, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800; }
         .input-group { display: flex; flex-direction: column; gap: 1rem; }
-        input { padding: 1rem 1.5rem; border-radius: 9999px; border: 2px solid #334155; background: #1e293b; color: white; font-size: 1.1rem; outline: none; }
-        input:focus { border-color: #38bdf8; }
+        input, select { padding: 1rem 1.5rem; border-radius: 9999px; border: 2px solid #334155; background: #1e293b; color: white; font-size: 1.1rem; outline: none; }
+        .mode-select { font-size: 0.9rem; border-radius: 10px; padding: 0.5rem; }
         button { padding: 1rem; border-radius: 9999px; border: none; background: #38bdf8; color: #0f172a; font-weight: bold; font-size: 1.1rem; cursor: pointer; }
     </style>
     <script>
-        // 【重要】直リンク対策：パスワード解除してない場合は焼き鳥画面に追い出す
         window.onload = function() {
-            if (localStorage.getItem('purokusiiiii_unlocked') !== 'true') {
-                window.location.replace('/');
-            }
+            if (localStorage.getItem('purokusiiiii_unlocked') !== 'true') window.location.replace('/');
         };
-
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js', { scope: '/' });
-        }
 
         function launch() {
             let url = document.getElementById('url').value;
+            let mode = document.getElementById('mode').value;
             if (!url) return;
             if (!url.startsWith('http')) url = 'https://' + url;
             
-            const encoded = btoa(unescape(encodeURIComponent(url)))
-                .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-            
-            window.location.href = `/api/proxy?url=${encoded}`;
+            const encoded = btoa(unescape(encodeURIComponent(url))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            // モード情報をURLに乗せて飛ばす
+            window.location.href = `/api/proxy?url=${encoded}&mode=${mode}`;
         }
     </script>
 </head>
@@ -43,6 +35,10 @@
         <h1>purokusiiiii</h1>
         <div class="input-group">
             <input type="text" id="url" placeholder="URLを入力 (例: game8.jp)">
+            <select id="mode" class="mode-select">
+                <option value="normal">通常モード (安定・高速)</option>
+                <option value="power">パワーモード (JS書き換え・攻略用)</option>
+            </select>
             <button onclick="launch()">閲覧開始</button>
         </div>
     </div>
