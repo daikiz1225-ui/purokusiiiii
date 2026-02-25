@@ -7,26 +7,29 @@ export default async function handler(req, res) {
         const targetUrl = Buffer.from(encoded, 'base64').toString('utf-8');
         const targetObj = new URL(targetUrl);
 
+        // iPadからのリクエストをそのまま中継
         const response = await fetch(targetUrl, {
             headers: {
-                'User-Agent': req.headers['user-agent'],
-                'Accept': req.headers['accept'],
+                'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0 (iPad; CPU OS 17_4 like Mac OS X)',
+                'Accept': req.headers['accept'] || '*/*',
                 'Referer': targetObj.origin + '/'
-            }
+            },
+            redirect: 'manual' // リダイレクトは手動で処理
         });
+
+        // リダイレクト処理
+        if (response.status >= 300 && response.status < 400) {
+            const loc = response.headers.get('location');
+            if (loc) {
+                const absLoc = new URL(loc, targetUrl).href;
+                const b64 = Buffer.from(absLoc).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+                return res.redirect(`/api/proxy?url=${b64}&mode=${mode}`);
+            }
+        }
 
         const contentType = response.headers.get('content-type') || '';
         res.setHeader('Content-Type', contentType);
         res.setHeader('Access-Control-Allow-Origin', '*');
-
-        // JSファイルそのものをプロキシ化する（ここがCroxy流）
-        if (contentType.includes('javascript')) {
-            let js = await response.text();
-            // location.href などの直接参照を書き換え
-            js = js.replace(/location\.href/g, 'p_loc.href');
-            js = js.replace(/location\.replace/g, 'p_loc.replace');
-            return res.send(js);
-        }
 
         if (!contentType.includes('text/html')) {
             const buffer = await response.arrayBuffer();
@@ -35,58 +38,25 @@ export default async function handler(req, res) {
 
         let html = await response.text();
 
-        // 究極の偽装スクリプト（HTMLの最上部に注入）
-        const croxyShield = `
+        // 【最重要】HTMLの書き換えは最小限にし、外部ファイル「engine.js」を最優先で読み込ませる
+        const engineScript = `
             <script>
-            (function() {
-                const targetOrigin = "${targetObj.origin}";
-                const targetUrl = "${targetUrl}";
-                const mode = "${mode || 'normal'}";
-
-                // URL変換の核
-                const wrap = (u) => {
-                    if(!u || typeof u !== 'string' || u.startsWith('data:') || u.startsWith('blob:') || u.includes('/api/proxy')) return u;
-                    try {
-                        const abs = new URL(u, targetUrl).href;
-                        return '/api/proxy?url=' + btoa(unescape(encodeURIComponent(abs))).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '') + '&mode=' + mode;
-                    } catch(e) { return u; }
-                };
-
-                // window.location の完全な偽装
-                window.p_loc = new Proxy(window.location, {
-                    get: (t, p) => (p === 'href') ? targetUrl : t[p],
-                    set: (t, p, v) => { if(p === 'href') window.location.href = wrap(v); return true; }
-                });
-
-                // Fetch & XHR
-                const _f = window.fetch;
-                window.fetch = (u, o) => _f(wrap(u), o);
-                const _o = XMLHttpRequest.prototype.open;
-                XMLHttpRequest.prototype.open = function(m, u) { return _o.apply(this, [m, wrap(u)]); };
-
-                // リンクの強制キャッチ
-                document.addEventListener('click', e => {
-                    const a = e.target.closest('a');
-                    if (a && a.href) {
-                        e.preventDefault();
-                        window.location.href = wrap(a.getAttribute('href'));
-                    }
-                }, true);
-            })();
+                window.__PROXY_TARGET__ = "${targetUrl}";
+                window.__PROXY_MODE__ = "${mode || 'normal'}";
             </script>
+            <script src="/engine.js"></script>
+            <base href="${targetObj.origin}/">
         `;
+        
+        // <head>の直後にエンジンをねじ込む
+        html = html.replace(/<head>/i, '<head>' + engineScript);
+        if (!html.toLowerCase().includes('<head>')) {
+            html = engineScript + html;
+        }
 
-        // 物理的な置換
-        html = html.replace(/(href|src|action)=["']([^"']+)["']/gi, (m, attr, link) => {
-            if (link.startsWith('#') || link.startsWith('javascript:')) return m;
-            // 相対パスを壊さないように慎重に変換
-            return \`\${attr}="\${wrap(link)}"\`;
-        });
-
-        html = html.replace('<head>', '<head>' + croxyShield);
         return res.send(html);
 
     } catch (error) {
-        res.status(500).send('Croxy-Mode Error: ' + error.message);
+        res.status(500).send('Backend Proxy Error: ' + error.message);
     }
 }
