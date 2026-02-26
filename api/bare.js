@@ -8,7 +8,7 @@ export default async function handler(req, res) {
             redirect: 'follow'
         });
 
-        // 404ならあえてステータスを返し、フロントエンドに「切り替え」を促す
+        // ステータスコードをそのまま返す（404なら404としてフロントに渡す）
         res.status(response.status);
 
         response.headers.forEach((v, k) => {
@@ -19,19 +19,19 @@ export default async function handler(req, res) {
 
         if ((response.headers.get('content-type') || '').includes('text/html')) {
             let html = await response.text();
-            // 再プロキシ化の核となるスクリプトを注入
             const inject = `
             <script>
             window.__TARGET_URL__ = "${decoded}";
             const encode = (u) => btoa(unescape(encodeURIComponent(u))).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
-            // 全てのリンクを自サイトのプロキシURLに書き換える
-            setInterval(() => {
-                document.querySelectorAll('a').forEach(a => {
-                    if (a.href && !a.href.includes(location.host)) {
-                        a.href = window.location.origin + '/api/bare?url=' + encode(new URL(a.href, window.__TARGET_URL__).href);
-                    }
-                });
-            }, 500);
+            // ページ内のクリックをすべてプロキシURLに変換
+            document.addEventListener('click', e => {
+                const a = e.target.closest('a');
+                if (a && a.href && !a.href.includes(location.host)) {
+                    e.preventDefault();
+                    window.location.href = window.location.origin + '/api/bare?url=' + encode(a.href);
+                }
+            }, true);
+            if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
             </script>`;
             return res.send(html.replace(/<head>/i, '<head>' + inject));
         }
