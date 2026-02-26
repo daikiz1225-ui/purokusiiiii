@@ -1,10 +1,11 @@
 self.addEventListener('fetch', e => {
-    // すでにプロキシ経由の通信、または自鯖への通信はスルー
-    if (e.request.url.includes('/api/bare') || e.request.url.includes(location.host)) return;
+    const url = e.request.url;
+    // 自鯖への通信、または既にプロキシ済みのURLはスルー
+    if (url.includes('/api/bare') || url.includes(location.host) || url.startsWith('data:')) return;
 
-    // それ以外の「生URL」への通信をすべてプロキシURLに変換して強制リダイレクト
+    // 生URLへのリクエスト（画像、CSS、リンク等）をすべてプロキシ経由に書き換えて奪い取る
     const encode = (u) => btoa(unescape(encodeURIComponent(u))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    const proxiedUrl = '/api/bare?url=' + encode(e.request.url);
+    const proxiedUrl = '/api/bare?url=' + encode(url);
 
     e.respondWith(Response.redirect(proxiedUrl, 302));
 });
