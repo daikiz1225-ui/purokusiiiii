@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>My Node Proxy</title>
+    <style>
+        /* 暗い背景に青いアクセントのモダンなデザイン */
+        :root {
+            --bg: #121212;
+            --card-bg: #1e1e1e;
+            --accent: #0055ff;
+            --text: #ffffff;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 600px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 30px;
+            letter-spacing: -1px;
+        }
+
+        .input-group {
+            display: flex;
+            background: var(--card-bg);
+            padding: 8px;
+            border-radius: 40px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            padding: 15px 25px;
+            color: white;
+            font-size: 18px;
+            outline: none;
+        }
+
+        button {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 30px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+        }
+
+        button:active {
+            transform: scale(0.95);
+            background: #0044cc;
+        }
+
+        .hint {
+            margin-top: 20px;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Node Proxy</h1>
+        
+        <div class="input-group">
+            <input type="text" id="url-input" placeholder="https://example.com" spellcheck="false">
+            <button onclick="launchProxy()">Go</button>
+        </div>
+
+        <p class="hint">URLを入力してGoを押してください。プロキシ経由で接続します。</p>
+    </div>
+
+    <script>
+        // URL入力後にGo！
+        function launchProxy() {
+            const input = document.getElementById('url-input').value;
+            if (!input) return;
+
+            // URLが http から始まっていない場合に補完
+            let targetUrl = input;
+            if (!input.startsWith('http')) {
+                targetUrl = 'https://' + input;
+            }
+
+            // URLをBase64に変換（Node.js側で受け取りやすくするため）
+            // 日本語URLにも対応できるように encodeURIComponent を噛ませるのがコツ
+            const encodedUrl = btoa(encodeURIComponent(targetUrl));
+
+            // Node.jsサーバーの /proxy エンドポイントに飛ばす
+            window.location.href = `/proxy?url=${encodedUrl}`;
+        }
+
+        // Enterキーで送信できるように設定
+        document.getElementById('url-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                launchProxy();
+            }
+        });
+    </script>
+</body>
+</html>
