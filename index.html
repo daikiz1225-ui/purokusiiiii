@@ -1,1 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iPad m3u8 Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body { background: #000; color: #fff; font-family: sans-serif; text-align: center; }
+        video { width: 100%; max-width: 640px; background: #222; margin-top: 20px; }
+        .controls { margin-top: 20px; }
+        input { padding: 10px; width: 70%; border-radius: 5px; border: none; }
+    </style>
+</head>
+<body>
 
+    <h3>iPad m3u8 再生テスト</h3>
+    
+    <video id="video" controls playsinline></video>
+
+    <div class="controls">
+        <input type="text" id="url" value="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"><br><br>
+        <button id="playBtn" style="padding: 10px 20px;">動画をロードして再生</button>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const playBtn = document.getElementById('playBtn');
+
+        playBtn.onclick = () => {
+            const m3u8Url = document.getElementById('url').value;
+
+            // ロジック1: hls.jsが使える場合 (主にPCやAndroid、一部の新しいiPad)
+            if (Hls.isSupported()) {
+                const hls = new Hls();
+                hls.loadSource(m3u8Url);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+            } 
+            // ロジック2: iPad/iPhoneのSafari標準機能で再生する場合
+            else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = m3u8Url;
+                video.addEventListener('loadedmetadata', () => {
+                    video.play();
+                });
+            }
+        };
+    </script>
+</body>
+</html>
