@@ -2,109 +2,68 @@ const http = require('http');
 const https = require('https');
 const url = require('url');
 
-// サーバー作成
-const server = http.createServer((req, res) => {
+// Vercel用のエクスポート形式（ここが大事！）
+module.exports = async (req, res) => {
     const parsedUrl = url.parse(req.url, true);
 
-    // 1. トップ画面 (URL入力フォーム)
-    if (parsedUrl.pathname === '/' || parsedUrl.pathname === '/index.html') {
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=UTF-8' });
-        res.end(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Node Proxy Server</title>
-                <style>
-                    body { background: #121212; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-                    .box { background: #1e1e1e; padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; width: 90%; max-width: 500px; }
-                    input { width: 80%; padding: 12px; border-radius: 25px; border: none; outline: none; margin-bottom: 20px; font-size: 16px; }
-                    button { background: #0055ff; color: white; border: none; padding: 12px 30px; border-radius: 25px; cursor: pointer; font-weight: bold; }
-                    button:hover { background: #0044cc; }
-                </style>
-            </head>
-            <body>
-                <div class="box">
-                    <h1>Node Proxy</h1>
-                    <input type="text" id="target" placeholder="https://example.com" spellcheck="false">
-                    <br>
-                    <button onclick="go()">サイトへ移動</button>
-                </div>
+    // 1. /api/proxy (引数なし) にアクセスした時はHTMLを返す
+    if (!parsedUrl.query.url) {
+        res.setHeader('Content-Type', 'text/html; charset=UTF-8');
+        res.status(200).send(`
+            <body style="background:#121212; color:white; text-align:center; padding-top:100px; font-family:sans-serif;">
+                <h1>Vercel Node Proxy</h1>
+                <input type="text" id="target" placeholder="https://example.com" style="width:60%; padding:15px; border-radius:30px;">
+                <button onclick="go()" style="padding:15px 30px; border-radius:30px; background:#0055ff; color:white; border:none; cursor:pointer;">Go</button>
                 <script>
                     function go() {
                         const val = document.getElementById('target').value;
                         if(!val) return;
                         let targetUrl = val.startsWith('http') ? val : 'https://' + val;
-                        // URLをBase64に変換してサーバーに送る
-                        location.href = '/proxy?url=' + btoa(encodeURIComponent(targetUrl));
+                        // Vercelの場合、自分自身のパスを指定する
+                        location.href = '/api/proxy?url=' + btoa(encodeURIComponent(targetUrl));
                     }
-                    document.getElementById('target').onkeydown = (e) => { if(e.key === 'Enter') go(); };
                 </script>
             </body>
-            </html>
         `);
         return;
     }
 
     // 2. プロキシ実行ロジック
-    if (parsedUrl.pathname === '/proxy' && parsedUrl.query.url) {
-        try {
-            // Base64をデコードして元のURLに戻す
-            const targetFullUrl = decodeURIComponent(Buffer.from(parsedUrl.query.url, 'base64').toString('utf-8'));
-            const target = url.parse(targetFullUrl);
+    try {
+        const targetFullUrl = decodeURIComponent(Buffer.from(parsedUrl.query.url, 'base64').toString('utf-8'));
+        const target = url.parse(targetFullUrl);
+        const targetPath = target.path || '/';
 
-            // 404対策: ターゲットのパスが空なら '/' をセット
-            const targetPath = target.path || '/';
+        const options = {
+            protocol: target.protocol,
+            hostname: target.hostname,
+            port: target.port || (target.protocol === 'https:' ? 443 : 80),
+            path: targetPath,
+            method: req.method,
+            headers: {
+                ...req.headers,
+                'host': target.hostname,
+                'referer': target.protocol + '//' + target.hostname + '/',
+                'accept-encoding': 'identity'
+            }
+        };
 
-            const options = {
-                protocol: target.protocol,
-                hostname: target.hostname,
-                port: target.port || (target.protocol === 'https:' ? 443 : 80),
-                path: targetPath,
-                method: req.method,
-                headers: {
-                    ...req.headers,
-                    'host': target.hostname, // 404/403回避に必須
-                    'referer': target.protocol + '//' + target.hostname + '/',
-                    'accept-encoding': 'identity' // 圧縮されると加工しにくいので非圧縮を要求
-                }
-            };
+        const requestLib = target.protocol === 'https:' ? https : http;
 
-            // HTTPSかHTTPか自動判別
-            const requestLib = target.protocol === 'https:' ? https : http;
+        const proxyReq = requestLib.request(options, (proxyRes) => {
+            // セキュリティヘッダーを削除
+            const headers = { ...proxyRes.headers };
+            delete headers['content-security-policy'];
+            delete headers['x-frame-options'];
+            
+            res.writeHead(proxyRes.statusCode, headers);
+            proxyRes.pipe(res);
+        });
 
-            const proxyReq = requestLib.request(options, (proxyRes) => {
-                // セキュリティヘッダーを削除して、自分のサーバーでも表示できるようにする
-                const headers = { ...proxyRes.headers };
-                delete headers['content-security-policy'];
-                delete headers['x-frame-options'];
-                delete headers['content-length']; // 加工するので一度消す
+        proxyReq.on('error', (e) => res.status(500).send("Proxy Error: " + e.message));
+        req.pipe(proxyReq);
 
-                res.writeHead(proxyRes.statusCode, headers);
-                proxyRes.pipe(res);
-            });
-
-            proxyReq.on('error', (e) => {
-                res.writeHead(500);
-                res.end("Proxy Error: " + e.message);
-            });
-
-            // ユーザーからのデータをターゲットに流す
-            req.pipe(proxyReq);
-
-        } catch (e) {
-            res.writeHead(400);
-            res.end("Invalid URL: " + e.message);
-        }
-    } else {
-        // どちらにも当てはまらない場合はトップへ
-        res.writeHead(302, { 'Location': '/' });
-        res.end();
+    } catch (e) {
+        res.status(400).send("Invalid URL");
     }
-});
-
-const PORT = 3000;
-server.listen(PORT, () => {
-    console.log(`Proxy server is running on http://localhost:${PORT}`);
-});
+};
