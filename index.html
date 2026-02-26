@@ -3,40 +3,39 @@ const https = require('https');
 const url = require('url');
 
 module.exports = async (req, res) => {
-    // 1. URLの解析
     const parsedUrl = url.parse(req.url, true);
     const queryUrl = parsedUrl.query.url;
 
-    // --- A: URLの指定がない場合 (最初の入力画面を表示) ---
+    // --- 1. URLが指定されていない場合：入力画面（HTML）を表示 ---
     if (!queryUrl) {
         res.setHeader('Content-Type', 'text/html; charset=UTF-8');
         return res.status(200).send(`
             <!DOCTYPE html>
-            <html lang="ja">
+            <html>
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Node Proxy</title>
+                <title>Vercel Proxy</title>
                 <style>
                     body { background: #121212; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-                    .container { background: #1e1e1e; padding: 40px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 85%; max-width: 500px; text-align: center; }
-                    input { width: 100%; padding: 15px; border-radius: 30px; border: none; outline: none; margin-bottom: 20px; font-size: 16px; box-sizing: border-box; }
-                    button { background: #0055ff; color: white; border: none; padding: 15px 40px; border-radius: 30px; cursor: pointer; font-weight: bold; font-size: 16px; width: 100%; }
+                    .box { background: #1e1e1e; padding: 40px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); width: 80%; max-width: 450px; text-align: center; }
+                    input { width: 100%; padding: 15px; border-radius: 30px; border: none; outline: none; margin-bottom: 20px; font-size: 16px; box-sizing: border-box; background: #333; color: white; }
+                    button { background: #0055ff; color: white; border: none; padding: 15px 40px; border-radius: 30px; cursor: pointer; font-weight: bold; width: 100%; font-size: 16px; }
                 </style>
             </head>
             <body>
-                <div class="container">
+                <div class="box">
                     <h1>🌐 Node Proxy</h1>
                     <input type="text" id="target" placeholder="google.com" spellcheck="false">
                     <button onclick="go()">サイトへ移動</button>
+                    <p style="color:#555; font-size:12px; margin-top:15px;">URLを入力してGoを押してください</p>
                 </div>
                 <script>
                     function go() {
                         const val = document.getElementById('target').value;
                         if(!val) return;
-                        // URLを整える（https:// がなければ足す）
                         let targetUrl = val.startsWith('http') ? val : 'https://' + val;
-                        // 【超重要】VercelのAPIパスに合わせて飛ばす
+                        // Vercelの絶対パスを指定（ここが404回避の鍵）
                         const encoded = btoa(encodeURIComponent(targetUrl));
                         window.location.href = '/api/proxy?url=' + encoded;
                     }
@@ -47,13 +46,11 @@ module.exports = async (req, res) => {
         `);
     }
 
-    // --- B: URLの指定がある場合 (プロキシ実行) ---
+    // --- 2. URLが指定されている場合：プロキシを実行 ---
     try {
-        // Base64から元のURLに復元
         const targetFullUrl = decodeURIComponent(Buffer.from(queryUrl, 'base64').toString('utf-8'));
         const target = url.parse(targetFullUrl);
 
-        // 404対策：パスが空なら / を入れる
         const options = {
             protocol: target.protocol,
             hostname: target.hostname,
@@ -71,7 +68,6 @@ module.exports = async (req, res) => {
         const requestLib = target.protocol === 'https:' ? https : http;
 
         const proxyReq = requestLib.request(options, (proxyRes) => {
-            // セキュリティ設定を解除（これがないと別ドメインで表示できない）
             const headers = { ...proxyRes.headers };
             delete headers['content-security-policy'];
             delete headers['x-frame-options'];
@@ -80,14 +76,10 @@ module.exports = async (req, res) => {
             proxyRes.pipe(res);
         });
 
-        proxyReq.on('error', (e) => {
-            res.status(500).send("Proxy Request Error: " + e.message);
-        });
-
-        // ユーザーからのデータをターゲットに流す
+        proxyReq.on('error', (e) => res.status(500).send("Proxy Error: " + e.message));
         req.pipe(proxyReq);
 
     } catch (e) {
-        res.status(400).send("URLデコードエラー: " + e.message);
+        res.status(400).send("Invalid URL");
     }
 };
