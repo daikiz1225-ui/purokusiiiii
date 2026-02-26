@@ -2,50 +2,47 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>purokusiiiii-V4</title>
+    <title>Embed Proxy</title>
     <style>
-        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; overflow: hidden; }
-        #banner { width: 100vw; height: 100vh; background: url('/IMG_0676.jpg') no-repeat center/cover; position: relative; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 10vh; }
-        .btn { background: #e11d48; color: white; padding: 20px 40px; font-size: 1.5rem; border-radius: 10px; cursor: pointer; border: 4px solid #fff; font-weight: bold; }
-        #ui { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #020617; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
-        input { font-size: 1.5rem; padding: 15px; width: 80%; max-width: 400px; text-align: center; background: #1e293b; color: #fff; border: 2px solid #334155; border-radius: 10px; margin-bottom: 20px; outline: none; }
-        #panic { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff; color: #f00; z-index: 200; padding: 20px; text-align: center; }
+        body, html, iframe { margin: 0; padding: 0; width: 100%; height: 100%; border: none; overflow: hidden; background: #000; }
     </style>
 </head>
 <body>
-    <div id="banner"><div class="btn" onclick="showUI()">お申し込みはこちら</div></div>
-    <div id="ui">
-        <h1 id="title">認証</h1>
-        <p id="hint" style="color:#64748b;">🐣</p>
-        <input type="password" id="inputBox" placeholder="****">
-        <button id="mainBtn" onclick="action()" style="padding:15px 50px; background:#38bdf8; border:none; border-radius:10px; cursor:pointer;">実行</button>
-    </div>
-    <div id="panic">
-        <h1 style="border:8px solid #f00; padding:20px;">登録完了。￥98,000</h1>
-        <button onclick="location.reload()">戻る</button>
-    </div>
+    <iframe id="proxyFrame"></iframe>
+
     <script>
-        let isUnlocked = localStorage.getItem('purokusiiiii_unlocked') === 'true';
-        const config = { prefix: '/api/bare?url=', encodeUrl: (u) => btoa(unescape(encodeURIComponent(u))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') };
-        
-        window.onload = async () => { if ('serviceWorker' in navigator) { const regs = await navigator.serviceWorker.getRegistrations(); for (let r of regs) await r.unregister(); } };
+        const config = {
+            prefix: '/api/bare?url=',
+            encode: (u) => btoa(unescape(encodeURIComponent(u))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+        };
 
-        function showUI() { document.getElementById('ui').style.display = 'flex'; if(isUnlocked) setupInput(); }
-        function setupInput() { document.getElementById('title').innerText = 'purokusiiiii'; document.getElementById('hint').style.display = 'none'; const box = document.getElementById('inputBox'); box.type = 'text'; box.placeholder = 'https://...'; box.value = ''; }
+        function loadPage(targetUrl) {
+            const frame = document.getElementById('proxyFrame');
+            const proxiedUrl = config.prefix + config.encode(targetUrl);
 
-        function action() {
-            const val = document.getElementById('inputBox').value;
-            if(!isUnlocked) {
-                if(val === '1225') { isUnlocked = true; localStorage.setItem('purokusiiiii_unlocked', 'true'); setupInput(); }
-                else { document.getElementById('ui').style.display = 'none'; document.getElementById('panic').style.display = 'block'; }
-            } else {
-                let url = val.trim();
-                if(!url) return;
-                if(!url.startsWith('http')) url = 'https://' + url;
-                location.href = config.prefix + config.encodeUrl(url);
-            }
+            // まずプロキシ経由で試す
+            frame.src = proxiedUrl;
+
+            // 404エラーや読み込み失敗を検知
+            frame.onerror = frame.onload = function() {
+                try {
+                    // もしiframeの中身が404（またはアクセス不可）なら
+                    if (frame.contentDocument.title.includes('404') || frame.contentWindow.length === 0) {
+                        console.log("404検知：生URLに切り替えます");
+                        frame.src = targetUrl; // 生URLを埋め込む
+                        
+                        // 生URLが読み込まれた後、クリックされたら再びプロキシに飛ばす仕掛け
+                        // (注: 同一オリジンでない場合は外部から操作できないため、
+                        // リンククリック時にこのindex.htmlが再度URLをキャッチする設定が必要です)
+                    }
+                } catch(e) {
+                    // クロスドメイン制限でエラーが出る場合は、生URLで動いている証拠
+                }
+            };
         }
+
+        // 初期URL（例：Game8）
+        loadPage('https://game8.jp');
     </script>
 </body>
 </html>
