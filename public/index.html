@@ -2,12 +2,22 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Embed Proxy</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>purokusiiiii-V4</title>
     <style>
-        body, html, iframe { margin: 0; padding: 0; width: 100%; height: 100%; border: none; overflow: hidden; background: #000; }
+        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; overflow: hidden; }
+        #ui { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #020617; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
+        input { font-size: 1.5rem; padding: 15px; width: 80%; max-width: 500px; background: #1e293b; color: #fff; border: 2px solid #334155; border-radius: 10px; margin-bottom: 20px; outline: none; }
+        button { padding: 15px 50px; background: #38bdf8; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        iframe { position: fixed; top: 0; left: 0; width: 100%; height: 100%; border: none; display: none; }
     </style>
 </head>
 <body>
+    <div id="ui">
+        <h1>purokusiiiii</h1>
+        <input type="text" id="urlInput" placeholder="https://..." spellcheck="false">
+        <button onclick="startProxy()">閲覧開始</button>
+    </div>
     <iframe id="proxyFrame"></iframe>
 
     <script>
@@ -16,33 +26,34 @@
             encode: (u) => btoa(unescape(encodeURIComponent(u))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
         };
 
-        function loadPage(targetUrl) {
-            const frame = document.getElementById('proxyFrame');
-            const proxiedUrl = config.prefix + config.encode(targetUrl);
+        function startProxy() {
+            let targetUrl = document.getElementById('urlInput').value.trim();
+            if(!targetUrl) return;
+            if(!targetUrl.startsWith('http')) targetUrl = 'https://' + targetUrl;
 
-            // まずプロキシ経由で試す
+            const ui = document.getElementById('ui');
+            const frame = document.getElementById('proxyFrame');
+            
+            ui.style.display = 'none';
+            frame.style.display = 'block';
+
+            // プロキシURLを生成
+            const proxiedUrl = config.prefix + config.encode(targetUrl);
             frame.src = proxiedUrl;
 
-            // 404エラーや読み込み失敗を検知
-            frame.onerror = frame.onload = function() {
+            // 404監視
+            frame.onload = function() {
                 try {
-                    // もしiframeの中身が404（またはアクセス不可）なら
-                    if (frame.contentDocument.title.includes('404') || frame.contentWindow.length === 0) {
-                        console.log("404検知：生URLに切り替えます");
-                        frame.src = targetUrl; // 生URLを埋め込む
-                        
-                        // 生URLが読み込まれた後、クリックされたら再びプロキシに飛ばす仕掛け
-                        // (注: 同一オリジンでない場合は外部から操作できないため、
-                        // リンククリック時にこのindex.htmlが再度URLをキャッチする設定が必要です)
+                    // 404が出た場合（または中身が空の場合）
+                    if (frame.contentDocument && (frame.contentDocument.title.includes('404') || frame.contentDocument.body.innerHTML === "")) {
+                        console.log("404検知：生URLへフォールバック");
+                        frame.src = targetUrl; // 生URLを直接埋め込む
                     }
                 } catch(e) {
-                    // クロスドメイン制限でエラーが出る場合は、生URLで動いている証拠
+                    // クロスドメイン制限エラー＝生URLで正常に動いている（SWが裏で仕事中）
                 }
             };
         }
-
-        // 初期URL（例：Game8）
-        loadPage('https://game8.jp');
     </script>
 </body>
 </html>
