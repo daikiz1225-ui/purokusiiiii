@@ -1,62 +1,129 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stealth Note</title>
+    <title>Personal Portal</title>
     <style>
-        body { background: #f4f4f4; font-family: sans-serif; text-align: center; padding-top: 50px; }
-        .container { background: white; padding: 30px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 80%; max-width: 450px; }
-        h2 { color: #333; }
-        input { padding: 15px; width: 90%; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; outline: none; margin-bottom: 10px; }
-        button { padding: 12px 30px; background: #000; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; width: 100%; }
+        body { 
+            background: #f0f2f5; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            margin: 0; 
+        }
+        .card { 
+            background: white; 
+            padding: 40px; 
+            border-radius: 20px; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1); 
+            width: 90%; 
+            max-width: 400px; 
+            text-align: center; 
+        }
+        h2 { color: #1c1e21; margin-bottom: 20px; font-weight: 600; }
+        input { 
+            width: 100%; 
+            padding: 15px; 
+            border: 2px solid #ddd; 
+            border-radius: 10px; 
+            font-size: 16px; 
+            box-sizing: border-box; 
+            outline: none; 
+            transition: border-color 0.3s; 
+        }
+        input:focus { border-color: #007bff; }
+        button { 
+            width: 100%; 
+            margin-top: 20px; 
+            padding: 15px; 
+            background: #007bff; 
+            color: white; 
+            border: none; 
+            border-radius: 10px; 
+            font-size: 16px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            transition: background 0.3s; 
+        }
+        button:hover { background: #0056b3; }
+        .footer { margin-top: 20px; font-size: 12px; color: #888; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>Note Search</h2>
-        <form id="proxy-form">
-            <input type="text" id="url-input" placeholder="URLを入力..." autocomplete="off">
-            <button type="submit">アクセス開始</button>
+    <div class="card">
+        <h2>Memo Search</h2>
+        <form id="uv-form">
+            <input type="text" id="uv-address" placeholder="URLを入力 (例: google.com)" autocomplete="off">
+            <button type="submit" id="uv-btn">アクセス開始</button>
         </form>
+        <div class="footer">Service Worker Mode</div>
     </div>
 
     <script src="/config.js"></script>
     <script src="/lib.js"></script>
+    
     <script>
-        // サイトを開いた瞬間に真っ白になるのを防ぐ
-        window.onload = async () => {
-            if ('serviceWorker' in navigator) {
-                const regs = await navigator.serviceWorker.getRegistrations();
-                // もし壊れたSWがあれば一旦消す（真っ白回避）
-                for(let reg of regs) {
-                    if (reg.active && !reg.active.scriptURL.includes('sw.js')) {
-                        await reg.unregister();
-                        location.reload();
-                    }
-                }
-            }
-        };
+        const form = document.getElementById('uv-form');
+        const address = document.getElementById('uv-address');
 
-        document.getElementById('proxy-form').onsubmit = async (e) => {
+        form.onsubmit = async (e) => {
             e.preventDefault();
-            const input = document.getElementById('url-input').value;
-            if (!input) return;
+            
+            let url = address.value.trim();
+            if (!url) return;
+            
+            // プロトコル補完
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                url = 'https://' + url;
+            }
 
-            const targetUrl = input.startsWith('http') ? input : 'https://' + input;
+            const btn = document.getElementById('uv-btn');
+            btn.innerText = '準備中...';
+            btn.disabled = true;
 
             if ('serviceWorker' in navigator) {
                 try {
-                    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/service/' });
-                    await navigator.serviceWorker.ready;
+                    // sw.js を登録 (スコープをルートに設定)
+                    const reg = await navigator.serviceWorker.register('/sw.js', {
+                        scope: '/'
+                    });
                     
-                    // 登録完了後に移動
-                    window.location.href = '/service/' + __uv$config.encodeUrl(targetUrl);
+                    // 登録完了を待つ
+                    await navigator.serviceWorker.ready;
+
+                    // iPadのSafari向けに一瞬ラグを作る
+                    setTimeout(() => {
+                        const encodedUrl = __uv$config.encodeUrl(url);
+                        // 強制的にリダイレクト
+                        window.location.href = '/service/' + encodedUrl;
+                    }, 500);
+
                 } catch (err) {
-                    alert('エラーが発生しました。ページを再読み込みしてください。');
+                    alert('Service Workerの起動に失敗しました: ' + err);
+                    btn.innerText = 'アクセス開始';
+                    btn.disabled = false;
                 }
+            } else {
+                alert('お使いのブラウザはプロキシをサポートしていません。');
             }
         };
+
+        // 古いキャッシュによる真っ白画面を回避する処理
+        window.addEventListener('load', () => {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(registrations => {
+                    for (let registration of registrations) {
+                        // 異常なパスで登録されているSWがあれば解除
+                        if (registration.scope.includes('/service/')) {
+                            registration.unregister();
+                        }
+                    }
+                });
+            }
+        });
     </script>
 </body>
 </html>
