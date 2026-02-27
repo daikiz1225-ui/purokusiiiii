@@ -1,7 +1,21 @@
 {
   "version": 2,
   "rewrites": [
-    { "source": "/bare/(.*)", "destination": "/api/index.js" },
-    { "source": "/service/(.*)", "destination": "/index.html" }
+    {
+      "source": "/bare/(.*)",
+      "destination": "/api/index.js"
+    },
+    {
+      "source": "/service/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Service-Worker-Allowed", "value": "/" }
+      ]
+    }
   ]
 }
