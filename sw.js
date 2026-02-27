@@ -1,6 +1,6 @@
-importScripts('./lib.js');
-importScripts('./config.js');
-importScripts('./sw-core.js');
+importScripts('/lib.js');
+importScripts('/config.js');
+importScripts('/sw-core.js');
 
 const uv = new UVServiceWorker();
 self.addEventListener('fetch', event => {
