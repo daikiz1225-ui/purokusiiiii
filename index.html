@@ -1,26 +1,62 @@
-<script src="/lib.js"></script>
-<script src="/config.js"></script>
-<script>
-    const form = document.getElementById('proxy-form');
-    form.onsubmit = async (e) => {
-        e.preventDefault();
-        const input = document.getElementById('url-input').value;
-        if (!input) return;
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stealth Note</title>
+    <style>
+        body { background: #f4f4f4; font-family: sans-serif; text-align: center; padding-top: 50px; }
+        .container { background: white; padding: 30px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 80%; max-width: 450px; }
+        h2 { color: #333; }
+        input { padding: 15px; width: 90%; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; outline: none; margin-bottom: 10px; }
+        button { padding: 12px 30px; background: #000; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; width: 100%; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Note Search</h2>
+        <form id="proxy-form">
+            <input type="text" id="url-input" placeholder="URLを入力..." autocomplete="off">
+            <button type="submit">アクセス開始</button>
+        </form>
+    </div>
 
-        const targetUrl = input.startsWith('http') ? input : 'https://' + input;
-
-        if ('serviceWorker' in navigator) {
-            try {
-                // sw.js は直下にあるので '/sw.js'
-                await navigator.serviceWorker.register('/sw.js', { scope: '/service/' });
-                await navigator.serviceWorker.ready;
-
-                setTimeout(() => {
-                    window.location.href = '/service/' + __uv$config.encodeUrl(targetUrl);
-                }, 300);
-            } catch (err) {
-                alert('SW Error: ' + err);
+    <script src="/config.js"></script>
+    <script src="/lib.js"></script>
+    <script>
+        // サイトを開いた瞬間に真っ白になるのを防ぐ
+        window.onload = async () => {
+            if ('serviceWorker' in navigator) {
+                const regs = await navigator.serviceWorker.getRegistrations();
+                // もし壊れたSWがあれば一旦消す（真っ白回避）
+                for(let reg of regs) {
+                    if (reg.active && !reg.active.scriptURL.includes('sw.js')) {
+                        await reg.unregister();
+                        location.reload();
+                    }
+                }
             }
-        }
-    };
-</script>
+        };
+
+        document.getElementById('proxy-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const input = document.getElementById('url-input').value;
+            if (!input) return;
+
+            const targetUrl = input.startsWith('http') ? input : 'https://' + input;
+
+            if ('serviceWorker' in navigator) {
+                try {
+                    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/service/' });
+                    await navigator.serviceWorker.ready;
+                    
+                    // 登録完了後に移動
+                    window.location.href = '/service/' + __uv$config.encodeUrl(targetUrl);
+                } catch (err) {
+                    alert('エラーが発生しました。ページを再読み込みしてください。');
+                }
+            }
+        };
+    </script>
+</body>
+</html>
