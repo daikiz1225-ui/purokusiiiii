@@ -1,32 +1,30 @@
 /**
- * Ultraviolet Service Worker Core (Compressed)
+ * Ultraviolet Service Worker Core (Final Fix)
  */
 self.addEventListener('fetch', (event) => {
-    const req = event.request;
-    const url = new URL(req.url);
+    const url = new URL(event.request.url);
 
-    // プロキシのスコープ内（/service/）の通信だけを処理
+    // /service/ から始まる通信をプロキシとして処理
     if (url.pathname.startsWith('/service/')) {
-        event.respondWith(handleRequest(event));
+        event.respondWith(
+            (async () => {
+                const config = self.__uv$config;
+                const targetUrl = config.decodeUrl(url.pathname.split('/service/')[1]);
+
+                // ターゲットへのリクエストをBare Server経由で構築
+                const bareUrl = `/bare/?url=${encodeURIComponent(targetUrl)}`;
+
+                try {
+                    const response = await fetch(bareUrl, {
+                        headers: event.request.headers,
+                        method: event.request.method,
+                        body: event.request.body
+                    });
+                    return response;
+                } catch (err) {
+                    return new Response('Proxy Error: ' + err, { status: 500 });
+                }
+            })()
+        );
     }
 });
-
-async function handleRequest(event) {
-    const config = self.__uv$config;
-    // 暗号化されたURLを解読
-    const targetUrl = config.decodeUrl(event.request.url.split('/service/')[1]);
-
-    // Bareサーバー経由でリクエストを投げる
-    const bareUrl = `${config.bare}?url=${encodeURIComponent(targetUrl)}`;
-    
-    // i-フィルターを回避するため、リクエストヘッダーを「普通のブラウザ」に偽装
-    const headers = new Headers(event.request.headers);
-    headers.set('Host', new URL(targetUrl).host);
-
-    return fetch(bareUrl, {
-        method: event.request.method,
-        headers: headers,
-        body: event.request.body,
-        redirect: 'follow'
-    });
-}
