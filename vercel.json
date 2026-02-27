@@ -2,7 +2,7 @@
   "version": 2,
   "routes": [
     { "src": "/bare/(.*)", "dest": "/api/index.js" },
-    { "src": "/service/(.*)", "dest": "/public/index.html" },
+    { "src": "/service/(.*)", "dest": "/index.html" },
     { "src": "/(.*)", "dest": "/$1" }
   ]
 }
