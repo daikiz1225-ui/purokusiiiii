@@ -11,8 +11,9 @@ window.__uv$config = {
             return atob(str).split('').map((char, i) => i % 2 ? String.fromCharCode(char.charCodeAt(0) ^ 2) : char).join('');
         } catch(e) { return str; }
     },
-    handler: './handle.js',
-    bundle: './lib.js',
-    config: './config.js',
-    sw: './sw-core.js',
+    // ここをすべて絶対パスに変更
+    handler: '/handle.js',
+    bundle: '/lib.js',
+    config: '/config.js',
+    sw: '/sw-core.js',
 };
