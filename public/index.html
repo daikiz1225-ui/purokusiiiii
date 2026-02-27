@@ -3,48 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Personal Note</title>
+    <title>Stealth Note</title>
     <style>
-        body { background: #f9f9f9; font-family: sans-serif; text-align: center; padding-top: 50px; }
-        input { padding: 12px; width: 80%; max-width: 400px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; }
-        button { margin-top: 15px; padding: 10px 25px; background: #333; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        body { background: #f4f4f4; font-family: sans-serif; text-align: center; padding-top: 50px; }
+        .container { background: white; padding: 30px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 80%; max-width: 450px; }
+        input { padding: 15px; width: 90%; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; outline: none; }
+        button { margin-top: 20px; padding: 12px 30px; background: #000; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; width: 100%; }
     </style>
 </head>
 <body>
-    <h2>Note Portal</h2>
-    <form id="f">
-        <input type="text" id="u" placeholder="URLを入力 (https://game8.jp)" autocomplete="off">
-        <br>
-        <button type="submit">アクセス</button>
-    </form>
+    <div class="container">
+        <h2>Memo Search</h2>
+        <form id="proxy-form">
+            <input type="text" id="url-input" placeholder="URLを入力..." autocomplete="off">
+            <button type="submit">GO</button>
+        </form>
+    </div>
 
     <script src="./lib.js"></script>
     <script src="./config.js"></script>
     <script>
-        document.getElementById('f').onsubmit = async e => {
+        const form = document.getElementById('proxy-form');
+        form.onsubmit = async (e) => {
             e.preventDefault();
-            const urlInput = document.getElementById('u').value;
-            if (!urlInput) return;
+            const input = document.getElementById('url-input').value;
+            if (!input) return;
 
-            const targetUrl = urlInput.startsWith('http') ? urlInput : 'https://' + urlInput;
+            const targetUrl = input.startsWith('http') ? input : 'https://' + input;
 
             if ('serviceWorker' in navigator) {
                 try {
-                    // 登録と完了を待つ
-                    const reg = await navigator.serviceWorker.register('./sw.js', {
-                        scope: '/service/'
-                    });
+                    // スコープをルートに設定して404を回避
+                    await navigator.serviceWorker.register('./sw.js', { scope: '/' });
                     await navigator.serviceWorker.ready;
 
-                    // 登録が反映されるまで一瞬待ってから移動
+                    // 反映を待ってから移動
                     setTimeout(() => {
-                        location.href = __uv$config.prefix + __uv$config.encodeUrl(targetUrl);
-                    }, 500);
+                        window.location.href = '/service/' + __uv$config.encodeUrl(targetUrl);
+                    }, 300);
                 } catch (err) {
-                    alert('エラー: ' + err);
+                    alert('SW Error: ' + err);
                 }
-            } else {
-                alert('未対応ブラウザです');
             }
         };
     </script>
