@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Notepad</title>
+    <style>
+        body { background: #f0f0f0; font-family: sans-serif; text-align: center; padding-top: 50px; }
+        input { padding: 10px; width: 70%; border: 1px solid #ccc; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h2>My Personal Note</h2>
+    <form id="f">
+        <input type="text" id="u" placeholder="https://game8.jp">
+    </form>
+    <script src="/lib.js"></script>
+    <script src="/config.js"></script>
+    <script>
+        document.getElementById('f').onsubmit = async e => {
+            e.preventDefault();
+            await navigator.serviceWorker.register('/sw.js');
+            const url = document.getElementById('u').value;
+            location.href = __uv$config.prefix + __uv$config.encodeUrl(url.startsWith('http') ? url : 'https://' + url);
+        };
+    </script>
+</body>
+</html>
