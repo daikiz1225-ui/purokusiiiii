@@ -1,20 +1,19 @@
-importScripts('/config.js');
-importScripts('/lib.js');
-importScripts('/sw-core.js');
-
-const uv = new UVServiceWorker();
-
-self.addEventListener('install', (event) => {
-    self.skipWaiting();
-});
-
-self.addEventListener('activate', (event) => {
-    event.waitUntil(self.clients.claim());
-});
-
-self.addEventListener('fetch', (event) => {
-    // /service/ 以下のリクエストだけを処理
-    if (event.request.url.includes('/service/')) {
-        event.respondWith(uv.fetch(event));
-    }
-});
+window.__uv$config = {
+    prefix: '/service/',
+    bare: '/bare/',
+    // iPadでもバグりにくい標準的なBase64エンコード
+    encodeUrl: (str) => {
+        if (!str) return str;
+        return btoa(encodeURIComponent(str));
+    },
+    decodeUrl: (str) => {
+        if (!str) return str;
+        try {
+            return decodeURIComponent(atob(str));
+        } catch(e) { return str; }
+    },
+    handler: '/handle.js',
+    bundle: '/lib.js',
+    config: '/config.js',
+    sw: '/sw-core.js',
+};
