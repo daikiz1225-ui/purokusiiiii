@@ -1,8 +1,8 @@
 {
-  "name": "system-module",
-  "version": "1.0.0",
-  "dependencies": {
-    "@tomphttp/bare-server-node": "^2.0.1",
-    "express": "^4.18.2"
-  }
+  "version": 2,
+  "routes": [
+    { "src": "/bare/(.*)", "dest": "/api/index.js" },
+    { "src": "/service/(.*)", "dest": "/index.html" },
+    { "src": "/(.*)", "dest": "/$1" }
+  ]
 }
